@@ -66,8 +66,54 @@ function attemptsFile(): Plugin {
   };
 }
 
+const SESSIONS_DIR = path.join(ROOT, 'data', 'sesiones');
+
+/** Registro del proceso: añade lotes de eventos a data/sesiones/<id>.json (solo servidor local). */
+function sessionsFile(): Plugin {
+  const handler = (req: any, res: any) => {
+    const send = (status: number, body: unknown) => {
+      res.statusCode = status;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify(body));
+    };
+    if (req.method !== 'POST') return send(405, { error: 'Método no permitido' });
+    let body = '';
+    req.on('data', (c: Buffer) => (body += c.toString('utf-8')));
+    req.on('end', () => {
+      try {
+        const { meta, events } = JSON.parse(body || '{}');
+        const id = String(meta?.id ?? '').replace(/[^A-Za-z0-9_-]/g, '');
+        if (!id || !Array.isArray(events)) return send(400, { error: 'Sesión no válida' });
+        fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+        const file = path.join(SESSIONS_DIR, `${id}.json`);
+        let doc: { meta: unknown; events: unknown[] } = { meta, events: [] };
+        try {
+          doc = JSON.parse(fs.readFileSync(file, 'utf-8'));
+        } catch {
+          /* fichero nuevo */
+        }
+        doc.meta = meta;
+        doc.events = [...(doc.events ?? []), ...events];
+        fs.writeFileSync(file, JSON.stringify(doc), 'utf-8');
+        send(200, { ok: true, file: path.relative(ROOT, file) });
+      } catch {
+        send(400, { error: 'JSON no válido' });
+      }
+    });
+  };
+  return {
+    name: 'sessions-file',
+    configureServer(server) {
+      server.middlewares.use('/api/sesiones', handler);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use('/api/sesiones', handler);
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), attemptsFile()],
+  plugins: [react(), attemptsFile(), sessionsFile()],
   base: './',
   test: {
     environment: 'node',

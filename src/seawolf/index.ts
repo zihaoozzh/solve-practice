@@ -399,6 +399,122 @@ export function generateSeaWolf(seed: string, difficulty: Difficulty, lang: Lang
   return { seed, lang, difficulty, zones };
 }
 
+// ---------------------------------------------------------------- perfil del sitio
+
+export interface ProfileOption {
+  key: string;
+  label: string;
+}
+
+/** Atributo cuyo rango se aleja más del centro de la escala (5.5) y en qué dirección. */
+export function mostDemandingAttribute(zone: Pick<Zone, 'ranges'>): { index: number; dir: 'high' | 'low'; dist: number; tie: boolean } {
+  const d = zone.ranges.map(([lo, hi]) => (lo + hi) / 2 - 5.5);
+  const order = d.map((v, i) => ({ i, a: Math.abs(v) })).sort((x, y) => y.a - x.a);
+  const top = order[0];
+  return { index: top.i, dir: d[top.i] > 0 ? 'high' : 'low', dist: top.a, tie: order.length > 1 && Math.abs(order[0].a - order[1].a) < 1 };
+}
+
+/**
+ * Perfil: se eligen 2 de 7 características. Las 7 son «Necesita <rasgo>» para cada uno de los 4 rasgos posibles
+ * y «<atributo> alto/bajo» para cada atributo (según hacia dónde se inclina su rango).
+ * Correctas: el rasgo deseado del sitio y el atributo más exigente (el rango más alejado del centro).
+ */
+export function profileOptions(zone: Zone): ProfileOption[] {
+  const en = zone.lang === 'en';
+  const traits = zone.traitPool.map((t) => ({ key: `trait:${t}`, label: en ? `Needs «${traitLabel(t, 'en')}»` : `Necesita «${traitLabel(t, 'es')}»` }));
+  const attrs = zone.attributes.map((a, i) => {
+    const high = (zone.ranges[i][0] + zone.ranges[i][1]) / 2 > 5.5;
+    return { key: `attr:${i}:${high ? 'high' : 'low'}`, label: en ? `${a}: ${high ? 'high' : 'low'}` : `${a}: ${high ? 'alta' : 'baja'}` };
+  });
+  return [...traits, ...attrs];
+}
+
+export function correctProfile(zone: Zone): string[] {
+  const m = mostDemandingAttribute(zone);
+  return [`trait:${zone.required}`, `attr:${m.index}:${m.dir}`];
+}
+
+// ---------------------------------------------------------------- regla de clasificación
+
+/** Margen admitido alrededor del rango: un valor a ≤2 puntos se puede compensar con los otros dos microbios. */
+export const CLASSIFY_MARGIN = 2;
+
+export interface FitCheck {
+  fits: boolean;
+  /** Motivos por los que NO encaja (vacío si encaja). */
+  reasons: string[];
+}
+
+/**
+ * Un microbio encaja en un sitio si NO tiene el rasgo no deseado y, además, o bien tiene el rasgo deseado
+ * (son escasos: se guardan aunque tengan valores extremos), o bien cada atributo está dentro del rango del sitio
+ * ampliado en ±2 puntos (CLASSIFY_MARGIN).
+ */
+export function fitsSite(zone: Zone, m: Microbe): FitCheck {
+  const reasons: string[] = [];
+  if (m.traits.includes(zone.prohibited)) {
+    reasons.push(`tiene el rasgo no deseado «${traitLabel(zone.prohibited, zone.lang)}»`);
+    return { fits: false, reasons };
+  }
+  if (m.traits.includes(zone.required)) return { fits: true, reasons };
+  zone.attributes.forEach((a, i) => {
+    const [lo, hi] = zone.ranges[i];
+    const v = m.attrs[i];
+    if (v < lo - CLASSIFY_MARGIN || v > hi + CLASSIFY_MARGIN)
+      reasons.push(`${a} = ${v}, a más de ${CLASSIFY_MARGIN} puntos del rango ${lo}–${hi} (admitido ${Math.max(1, lo - CLASSIFY_MARGIN)}–${Math.min(10, hi + CLASSIFY_MARGIN)})`);
+  });
+  return { fits: reasons.length === 0, reasons };
+}
+
+/**
+ * Regla de clasificación (la que usa la corrección):
+ * 1. «Este sitio» si encaja en este sitio (fitsSite) y el pool aún tiene hueco.
+ * 2. «Siguiente sitio» si no encaja aquí (o el pool está lleno) pero encaja en el sitio siguiente.
+ * 3. «Rechazar» en cualquier otro caso (en el último sitio no hay «siguiente sitio»).
+ */
+export function expectedDecision(zone: Zone, next: Zone | null, m: Microbe, poolFull: boolean): { expected: Decision; here: FitCheck; there: FitCheck | null } {
+  const here = fitsSite(zone, m);
+  const there = next ? fitsSite(next, m) : null;
+  if (here.fits && !poolFull) return { expected: 'site', here, there };
+  if (there?.fits) return { expected: 'next', here, there };
+  return { expected: 'reject', here, there };
+}
+
+/** ¿Hay un trío válido dentro de este conjunto? */
+export function poolHasValidTrio(zone: Zone, ms: Microbe[]): boolean {
+  for (let i = 0; i < ms.length; i++)
+    for (let j = i + 1; j < ms.length; j++) for (let k = j + 1; k < ms.length; k++) if (failing(zone, [ms[i], ms[j], ms[k]]).length === 0) return true;
+  return false;
+}
+
+/**
+ * Juega el sitio siguiendo la regla de clasificación al pie de la letra (sin aplazados) y eligiendo en cada ronda
+ * un microbio que mantenga posible un trío válido. Devuelve el pool final.
+ */
+export function playByRule(zone: Zone): Microbe[] {
+  const pool: Microbe[] = [];
+  for (const m of zone.classification) if (pool.length < POOL_START_MAX && fitsSite(zone, m).fits) pool.push(m);
+  zone.rounds.forEach((round, r) => {
+    const rest = zone.rounds.slice(r + 1);
+    const keeps = (cand: Microbe) => {
+      const all = [...pool, cand];
+      const opts = [...all, ...rest.flat()];
+      const roundOf = new Map(rest.flatMap((rr, ri) => rr.map((x) => [x.id, ri] as const)));
+      for (let i = 0; i < opts.length; i++)
+        for (let j = i + 1; j < opts.length; j++)
+          for (let k = j + 1; k < opts.length; k++) {
+            const t = [opts[i], opts[j], opts[k]];
+            const rs = t.filter((x) => roundOf.has(x.id)).map((x) => roundOf.get(x.id));
+            if (new Set(rs).size !== rs.length) continue;
+            if (failing(zone, t).length === 0) return true;
+          }
+      return false;
+    };
+    pool.push(round.find(keeps) ?? round[0]);
+  });
+  return pool;
+}
+
 // ---------------------------------------------------------------- validación
 
 export interface ZoneIssue {
@@ -427,12 +543,22 @@ export function validateZone(zone: Zone): ZoneIssue[] {
       add('ATTRS', `${m.name} tiene valores fuera de 1–10.`);
     if (m.traits.length !== 1 || !zone.traitPool.includes(m.traits[0])) add('TRAITS', `${m.name} debe tener exactamente un rasgo de los 4 posibles.`);
   }
+  const demanding = mostDemandingAttribute(zone);
+  if (demanding.tie || demanding.dist < 1) add('PROFILE', 'El perfil correcto del sitio es ambiguo (dos atributos igual de exigentes).');
   const carriers = all.filter((m) => m.traits.includes(zone.required));
   if (!carriers.length) add('REQUIRED', 'Ningún microbio tiene el rasgo deseado.');
   if (zone.extremeCarriers && carriers.some((m) => !m.attrs.some(isExtreme)))
     add('EXTREME', 'El sitio dice que el rasgo deseado solo aparece con valores extremos, pero hay portadores sin ellos.');
   const bf = bruteForce(zone, all);
   if (bf.solutions.length === 0) add('NO_SOLUTION', 'No hay ningún trío válido alcanzable con los candidatos que aparecen.');
+  // La regla de clasificación debe permitir llegar a una solución: los microbios de clasificación de algún trío válido
+  // deben ser «este sitio» según la regla.
+  const classIds = new Set(zone.classification.map((m) => m.id));
+  const byIdAll = new Map(all.map((m) => [m.id, m]));
+  if (bf.solutions.length && !bf.solutions.some((sol) => sol.every((id) => !classIds.has(id) || fitsSite(zone, byIdAll.get(id)!).fits)))
+    add('RULE_SOLUTION', 'Ninguna solución es alcanzable siguiendo la regla de clasificación.');
+  // Siguiendo la regla de clasificación al pie de la letra (con el límite del pool), debe quedar un trío válido.
+  if (!poolHasValidTrio(zone, playByRule(zone))) add('RULE_PATH', 'Siguiendo la regla de clasificación, el pool no llega a contener ningún trío válido.');
   const key = (s: string[]) => s.slice().sort().join('|');
   if (bf.solutions.map(key).sort().join(';') !== zone.solutions.map(key).sort().join(';'))
     add('SOLUTIONS', 'La lista de soluciones guardada no coincide con la fuerza bruta.');
@@ -452,6 +578,8 @@ export function validateZone(zone: Zone): ZoneIssue[] {
 export type Decision = 'site' | 'next' | 'reject';
 
 export interface ZoneAnswer {
+  /** Las 2 características elegidas en el perfil. */
+  profile: string[];
   /** Decisión de clasificación por microbio (id). */
   decisions: Record<string, Decision>;
   /** Microbios aplazados desde el sitio anterior que se mantuvieron en este. */
@@ -465,7 +593,7 @@ export interface ZoneAnswer {
   completed: boolean;
 }
 
-export const emptyZoneAnswer = (): ZoneAnswer => ({ decisions: {}, reviewKept: [], roundPicks: [], pool: [], selected: [], timeSec: 0, completed: false });
+export const emptyZoneAnswer = (): ZoneAnswer => ({ profile: [], decisions: {}, reviewKept: [], roundPicks: [], pool: [], selected: [], timeSec: 0, completed: false });
 
 export interface ZoneGrade {
   check: SelectionCheck;

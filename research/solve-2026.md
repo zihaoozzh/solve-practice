@@ -9,8 +9,9 @@ Investigación hecha el 16 de octubre de 2026 para preparar la prueba del 24 de 
 
 **Aviso de método**
 - No se incluye ninguna pregunta, dato ni escenario de la prueba real. Se descartaron, sin enlazarlas, webs que venden "solvers", herramientas de respuesta o supuestos volcados de la prueba.
-- Reddit (r/consulting, r/MBA) no se pudo leer directamente porque las herramientas bloquean el dominio, y el buscador no devolvió hilos concretos. Los relatos de candidatos vienen sobre todo de PrepLounge. Ver sección 7.
+- Reddit (r/consulting, r/MBA, r/McKinseyAndCompany) no se pudo leer. El 16-oct-2026 se volvió a intentar por tres vías: lectura directa, buscador filtrado por dominio y navegador real. Las tres están bloqueadas para Reddit, y el buscador general no devuelve fragmentos de hilos. Los relatos de candidatos vienen sobre todo de PrepLounge, de un foro de CaseBasix y de un fragmento de Glassdoor. Ver sección 8.
 - Las páginas de McKinsey se leyeron en un navegador real. El subtítulo del vídeo oficial (septiembre de 2025) se descargó de su reproductor. Es la fuente oficial más detallada que existe sobre las mecánicas.
+- **SFL (sección 9):** se descartaron, sin enlazarlas, varias páginas y vídeos de webs de preparación que reproducen contenido concreto de la prueba real: nombres de investigadores, especialidades y temas exactos de las estaciones, nombres de misiones y recorridos pregunta a pregunta. Solo se usan fuentes que describen mecánicas.
 
 ---
 
@@ -19,7 +20,7 @@ Investigación hecha el 16 de octubre de 2026 para preparar la prueba del 24 de 
 1. **La invitación indica qué módulos te tocan.** McKinsey solo dice que la duración figura en el email de invitación y que cada tarea empieza con un tutorial sin tiempo **[Oficial]** ([FAQ ago-2025](https://www.mckinsey.com/~/media/mckinsey/careers%20redesign/interviewing/getting%20ready%20for%20your%20interviews/faqs-solve-aug-2025.pdf)). La correspondencia que dan las fuentes no oficiales es esta **[Web de preparación]**/**[Candidatos]**:
    - **65 min**: Redrock + Sea Wolf.
    - **85 min**: Redrock + Sea Wolf + Sustainable Futures Lab (SFL) de unos 20 min.
-   - **"Aprox. 95 min"** (desde agosto de 2026): es ambiguo. Puede ser lo mismo que 85 min más margen, o los dos juegos más un SFL rediseñado de unos 30 min (ver 2.3).
+   - **"Aprox. 95 min"** (desde finales de agosto de 2026): lo más probable, con certeza media, es Redrock + Sea Wolf + **SFL "Island"** (unos 30 min, 3 días gestionando 4 investigadores). Hay relatos de candidatos de septiembre y octubre de 2026 en EE. UU., Reino Unido, Asia y África, y las webs de preparación coinciden desde octubre. La alternativa, 85 min de juego más margen con el SFL clásico, no está descartada (ver 2.3 y 9.1).
 2. **Redrock y Sea Wolf son seguros.** El vídeo oficial (publicado el 10 de septiembre de 2025) solo presenta estas dos tareas: "Red Rock Island" y el barco "Sea Wolf" **[Oficial]** ([página Solve](https://www.mckinsey.com/careers/mckinsey-digital-assessment)). Ecosystem Building y Plant Defense ya no aparecen desde mediados de 2025 **[Web de preparación]**.
 3. **Redrock** dura unos 35 min en un solo reloj compartido **[Web de preparación]**. Sigue esta secuencia:
    - Estudio: Investigación, luego Análisis, luego Informe.
@@ -44,6 +45,11 @@ Investigación hecha el 16 de octubre de 2026 para preparar la prueba del 24 de 
    - Aprovecha bien los tutoriales sin tiempo, pero ojo: el paso del tutorial a la parte cronometrada puede no anunciarse **[Web de preparación]**.
    - En Redrock, deja tiempo para los 6 mini-casos.
    - En Sea Wolf, no persigas el 100 % si no existe. Si un problema técnico te afecta, escribe a soporte en ese momento, porque si no, no hay reinicio **[Oficial]**.
+   - Con una invitación de 95 min, prepara sobre todo el SFL Island, pero repasa también el clásico. Lo más arriesgado del Island es perder el día 1 aprendiendo la interfaz **[Candidatos]**/**[Web de preparación]** (ver 9.6).
+10. **SFL en dos versiones** (detalle en la sección 9). McKinsey no ha publicado nada sobre este módulo **[Oficial]** (ausencia). Según las fuentes no oficiales:
+    - **Clásico**, unos 20 min: un ranking por arrastre y 12 decisiones de texto encadenadas, sin vuelta atrás **[Web de preparación]**.
+    - **Island**, unos 30 min: onboarding y 3 días. Cada día sigue el ciclo Explore → Assign → Support → Reflect, con 4 investigadores y 4 estaciones **[Candidatos]**/**[Web de preparación]**.
+    - **No hay puntuación publicada** en ninguna de las dos.
 
 ---
 
