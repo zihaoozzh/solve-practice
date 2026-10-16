@@ -8,12 +8,14 @@ export function ConfirmButton({
   onConfirm,
   disabled,
   className = 'btn primary',
+  labels = { confirm: 'Sí, continuar', cancel: 'Cancelar' },
 }: {
   children: ReactNode;
   warning: string;
   onConfirm: () => void;
   disabled?: boolean;
   className?: string;
+  labels?: { confirm: string; cancel: string };
 }) {
   const [asking, setAsking] = useState(false);
   if (asking)
@@ -21,10 +23,10 @@ export function ConfirmButton({
       <div className="confirm-box">
         <span>{warning}</span>
         <button type="button" className="btn primary" autoFocus onClick={() => { setAsking(false); onConfirm(); }}>
-          Sí, continuar
+          {labels.confirm}
         </button>
         <button type="button" className="btn ghost" onClick={() => setAsking(false)}>
-          Cancelar
+          {labels.cancel}
         </button>
       </div>
     );
@@ -99,12 +101,12 @@ export function TraitIcon({ trait, size = 18 }: { trait: string; size?: number }
   );
 }
 
-export function TraitTag({ trait, tone }: { trait: string; tone?: 'req' | 'proh' }) {
+export function TraitTag({ trait, tone, lang = 'es' }: { trait: string; tone?: 'req' | 'proh'; lang?: 'es' | 'en' }) {
   const def = TRAITS.find((t) => t.key === trait);
   return (
     <span className={`trait-tag ${tone ?? ''}`}>
       <TraitIcon trait={trait} size={15} />
-      {def?.label}
+      {def?.labels[lang]}
     </span>
   );
 }

@@ -24,7 +24,9 @@ interface Props {
   mode: Mode;
   redrock?: RedrockRunResult;
   seawolf?: SeaWolfRunResult;
+  savedTo?: 'file' | 'browser' | null;
   onHome: () => void;
+  onStats?: () => void;
   onRepeat: () => void;
 }
 
@@ -33,7 +35,7 @@ export function seaWolfScore(r: SeaWolfRunResult): number {
   return Math.round(g.reduce((s, x) => s + x.score, 0) / g.length);
 }
 
-export function Results({ mode, redrock, seawolf, onHome, onRepeat }: Props) {
+export function Results({ mode, redrock, seawolf, savedTo, onHome, onStats, onRepeat }: Props) {
   const rr = redrock ? gradeRedrock(redrock.scenario, redrock.answers) : null;
   const sw = seawolf ? seaWolfScore(seawolf) : null;
   const overall = rr && sw != null ? Math.round((rr.overall + sw) / 2) : (rr?.overall ?? sw ?? 0);
@@ -49,11 +51,19 @@ export function Results({ mode, redrock, seawolf, onHome, onRepeat }: Props) {
           <div className="muted">
             Semilla <strong>{seed}</strong> · {difficulty === 'hard' ? 'Difícil' : 'Normal'}
           </div>
+          <div className="muted small">
+            {savedTo === 'file' ? 'Intento guardado en data/intentos.json.' : savedTo === 'browser' ? 'Intento guardado en este navegador.' : 'Guardando intento…'}
+          </div>
         </div>
         <div className="results-actions">
           <button type="button" className="btn outline" onClick={onRepeat}>
             Repetir este escenario
           </button>
+          {onStats && (
+            <button type="button" className="btn outline" onClick={onStats}>
+              Ver evolución
+            </button>
+          )}
           <button type="button" className="btn primary" onClick={onHome}>
             Volver al inicio
           </button>
@@ -131,6 +141,22 @@ function RedrockReview({ r }: { r: RedrockRunResult }) {
             Te faltó guardar: {missing.map((id) => `${st.data[id].label} (${st.data[id].display} ${st.data[id].unit})`).join('; ')}.
           </p>
         )}
+      </div>
+
+      <h3>Distractores del material</h3>
+      <div className="card">
+        <p className="muted small">Cifras que no necesitaba ninguna pregunta y por qué. Las marcadas con ● las guardaste en el diario.</p>
+        {Object.values(st.data)
+          .filter((d) => !d.relevant)
+          .map((d) => (
+            <div key={d.id} className="review-line neutral">
+              {a.journal.includes(d.id) && <span className="sol-mark">● </span>}
+              <strong>
+                {d.display} {d.unit}
+              </strong>{' '}
+              — {d.label}: {d.note ?? 'no se necesita para ninguna pregunta.'}
+            </div>
+          ))}
       </div>
 
       <h3>Análisis</h3>

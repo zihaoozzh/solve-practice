@@ -5,7 +5,7 @@ export interface CalcHistoryItem {
   result: string;
 }
 
-/** Evaluador seguro de expresiones (+ − × ÷ paréntesis, % como /100). Sin eval. */
+/** Evaluador seguro de expresiones básicas (+ − × ÷ y paréntesis), como la calculadora de la prueba. Sin eval. */
 export function evaluate(expr: string): number {
   const src = expr.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/,/g, '').replace(/\s+/g, '');
   let i = 0;
@@ -49,14 +49,6 @@ export function evaluate(expr: string): number {
       i += m[0].length;
       v = Number(m[0]);
     }
-    while (peek() === '%') {
-      i++;
-      v = v / 100;
-    }
-    if (peek() === '^') {
-      i++;
-      v = v ** parseFactor();
-    }
     return v;
   };
   const out = parseExpr();
@@ -74,11 +66,15 @@ interface Props {
   setExpr: (s: string) => void;
   history: CalcHistoryItem[];
   setHistory: (h: CalcHistoryItem[]) => void;
+  /** Guarda el último resultado en el diario (los cálculos se guardan en el journal en la prueba real). */
+  onSave?: (item: CalcHistoryItem) => void;
+  labels?: { title: string; history: string; clear: string; save: string };
 }
 
-const KEYS = ['7', '8', '9', '÷', '4', '5', '6', '×', '1', '2', '3', '−', '0', '.', '(', '+', ')', '^', '%', '⌫'];
+// Calculadora básica: sin potencias ni porcentaje (según las fuentes sobre la prueba real).
+const KEYS = ['7', '8', '9', '÷', '4', '5', '6', '×', '1', '2', '3', '−', '0', '.', '(', '+', ')', '⌫'];
 
-export function Calculator({ expr, setExpr, history, setHistory }: Props) {
+export function Calculator({ expr, setExpr, history, setHistory, onSave, labels = { title: 'Calculadora', history: 'Historial', clear: 'borrar', save: 'Guardar en el diario' } }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   let preview = '';
   try {
@@ -104,12 +100,12 @@ export function Calculator({ expr, setExpr, history, setHistory }: Props) {
 
   return (
     <div className="calc">
-      <div className="panel-title">Calculadora</div>
+      <div className="panel-title">{labels.title}</div>
       <input
         ref={inputRef}
         className="calc-input"
         value={expr}
-        placeholder="p. ej. (2770-1940)/1940*100"
+        placeholder="(2770-1940)/1940*100"
         onChange={(e) => setExpr(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') compute();
@@ -131,12 +127,17 @@ export function Calculator({ expr, setExpr, history, setHistory }: Props) {
           =
         </button>
       </div>
+      {onSave && history.length > 0 && (
+        <button type="button" className="btn small outline calc-save" onClick={() => onSave(history[0])}>
+          {labels.save}: {history[0].result}
+        </button>
+      )}
       {history.length > 0 && (
         <div className="calc-history">
           <div className="calc-history-head">
-            <span>Historial</span>
+            <span>{labels.history}</span>
             <button type="button" className="link-btn" onClick={() => setHistory([])}>
-              borrar
+              {labels.clear}
             </button>
           </div>
           {history.map((h, i) => (

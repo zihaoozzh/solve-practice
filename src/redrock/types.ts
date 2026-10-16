@@ -45,6 +45,8 @@ export interface ChartSpec {
   series: { name: string; values: number[]; datumIds?: string[] }[];
   yLabel?: string;
   decimals?: number;
+  /** false para no rotular cada punto (gráficos con muchas series). */
+  showValues?: boolean;
 }
 
 export type Material = (
@@ -146,6 +148,7 @@ export interface CaseQuestion {
 
 export interface RedrockScenario {
   seed: string;
+  lang: import('../lib/history').Lang;
   difficulty: Difficulty;
   study: Study;
   cases: CaseQuestion[];

@@ -1,19 +1,20 @@
 import { createRng } from '../lib/rng';
 import { parseUserNumber } from '../lib/format';
-import { THEMES } from './themes';
+import { localizeTheme, THEME_DEFS } from './themes';
+import type { Lang } from '../lib/history';
 import { generateStudy } from './study';
 import { generateCases } from './cases';
 import type { CaseQuestion, ChartType, Difficulty, NumericQuestion, RedrockScenario, ReportBlank } from './types';
 
-export function generateRedrock(seed: string, difficulty: Difficulty): RedrockScenario {
+export function generateRedrock(seed: string, difficulty: Difficulty, lang: Lang = 'es'): RedrockScenario {
   const rng = createRng(`redrock|${difficulty}|${seed}`);
-  const theme = rng.pick(THEMES);
+  const theme = localizeTheme(rng.pick(THEME_DEFS), lang);
   const study = generateStudy(rng, theme, difficulty);
   const cases = generateCases(rng, theme, difficulty);
-  return { seed, difficulty, study, cases };
+  return { seed, lang, difficulty, study, cases };
 }
 
-export const JOURNAL_MAX = 8;
+export { JOURNAL_LIMIT as JOURNAL_MAX } from '../config';
 
 export interface RedrockAnswers {
   journal: string[]; // ids de datos guardados
@@ -22,6 +23,8 @@ export interface RedrockAnswers {
   chartType: ChartType | null;
   chartValues: (number | null)[]; // índice de valueOptions por elemento
   cases: Record<string, string>; // mcq -> índice como texto; numeric -> texto
+  /** Cálculos guardados en el diario desde la calculadora. */
+  calcs: { expr: string; result: string }[];
 }
 
 export interface RedrockTimes {
@@ -40,6 +43,7 @@ export function emptyRedrockAnswers(s: RedrockScenario): RedrockAnswers {
     chartType: null,
     chartValues: s.study.chartTask.elements.map(() => null),
     cases: {},
+    calcs: [],
   };
 }
 

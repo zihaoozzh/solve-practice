@@ -160,6 +160,13 @@ export function validateStudy(study: Study): Issue[] {
   if (!study.objective.includes(String(f.period[0])) || !study.objective.includes(String(f.period[1])))
     add('PERIOD', 'El objetivo no menciona el periodo del estudio.');
   if (!study.objective.includes(f.siteA) || !study.objective.includes(f.siteB)) add('OBJECTIVE', 'El objetivo no nombra los dos sitios.');
+  // El objetivo debe fijar sin ambigüedad qué serie de datos usar (el censo anual).
+  const censusTitle = study.materials.find((m) => m.claims?.some((c) => c.kind === 'period' && c.series === 'census'));
+  const censusName = censusTitle && censusTitle.kind === 'table' ? censusTitle.title.split(' — ')[0].toLowerCase() : '';
+  if (!censusName || !study.objective.toLowerCase().includes(censusName)) add('OBJECTIVE', 'El objetivo no indica qué serie de datos (el censo) hay que usar.');
+
+  // Cada distractor debe llevar la explicación de por qué lo es (se muestra en la corrección).
+  for (const d of Object.values(study.data)) if (!d.relevant && !d.note) add('DISTRACTOR_NOTE', `El distractor ${d.id} no explica por qué no sirve.`);
 
   // 6. Preguntas: los datos necesarios existen y la respuesta se reproduce desde los datos.
   for (const q of study.questions) {

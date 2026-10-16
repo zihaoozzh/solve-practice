@@ -88,4 +88,28 @@ describe('Validador de coherencia de Redrock', () => {
     st.objective = st.objective.replace(String(st.facts.period[1]), String(st.facts.period[1] + 1));
     expect(codes(st)).toContain('PERIOD');
   });
+
+  it('los escenarios en inglés también son coherentes y tienen los mismos números que en español', () => {
+    for (const seed of SEEDS.slice(0, 100)) {
+      for (const diff of ['normal', 'hard'] as const) {
+        const es = generateRedrock(seed, diff, 'es');
+        const en = generateRedrock(seed, diff, 'en');
+        expect(validateStudy(en.study)).toEqual([]);
+        expect(Object.values(en.study.data).map((d) => d.value)).toEqual(Object.values(es.study.data).map((d) => d.value));
+        expect(en.study.questions.map((q) => q.answer)).toEqual(es.study.questions.map((q) => q.answer));
+        expect(en.cases.map((c) => c.answer)).toEqual(es.cases.map((c) => c.answer));
+        expect(en.study.objective).not.toBe(es.study.objective);
+      }
+    }
+  });
+
+  it('el informe tiene entre 8 y 10 huecos y el gráfico pide barras, líneas o tarta', () => {
+    for (const seed of SEEDS.slice(0, 100)) {
+      const st = generateRedrock(seed, 'normal').study;
+      expect(st.blanks.length).toBeGreaterThanOrEqual(8);
+      expect(st.blanks.length).toBeLessThanOrEqual(10);
+      expect(['bar', 'line', 'pie']).toContain(st.chartTask.correctType);
+      st.questions.forEach((q) => expect(q.decimals).toBe(2));
+    }
+  });
 });

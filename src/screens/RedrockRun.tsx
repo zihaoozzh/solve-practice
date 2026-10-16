@@ -3,72 +3,78 @@ import { Chart } from '../components/Chart';
 import { Calculator, CalcHistoryItem } from '../components/Calculator';
 import { ConfirmButton, SimpleTable } from '../components/ui';
 import { TimerBadge, useCountdown } from '../components/Timer';
-import { fmtTime } from '../lib/format';
-import { emptyRedrockAnswers, JOURNAL_MAX, RedrockAnswers, RedrockTimes } from '../redrock';
-import type { ChartType, Datum, Material, RedrockScenario } from '../redrock/types';
+import { fmt, fmtTime } from '../lib/format';
+import { TIMING } from '../config';
+import { UI_TEXT, UI } from '../i18n';
+import { emptyRedrockAnswers, gradeCase, JOURNAL_MAX, RedrockAnswers, RedrockTimes } from '../redrock';
+import type { CaseQuestion, ChartType, Datum, Material, RedrockScenario } from '../redrock/types';
 
 type Phase = 'investigation' | 'analysis' | 'report' | 'cases';
-
-const PHASES: { key: Phase; label: string }[] = [
-  { key: 'investigation', label: 'Investigación' },
-  { key: 'analysis', label: 'Análisis' },
-  { key: 'report', label: 'Informe' },
-  { key: 'cases', label: 'Casos' },
-];
-
-const CHART_TYPES: { key: ChartType; label: string }[] = [
-  { key: 'bar', label: 'Barras' },
-  { key: 'line', label: 'Líneas' },
-  { key: 'pie', label: 'Tarta' },
-  { key: 'scatter', label: 'Dispersión' },
-];
+const PHASE_ORDER: Phase[] = ['investigation', 'analysis', 'report', 'cases'];
+/** Tipos de gráfico que mencionan las fuentes para el informe: líneas, barras y tarta. */
+const CHART_TYPES: ChartType[] = ['bar', 'line', 'pie'];
 
 interface Props {
   scenario: RedrockScenario;
   durationSec: number;
   label?: string;
+  /** Modo examen: sin pistas, sin guía de tiempos y sin soluciones hasta el final. */
+  exam?: boolean;
   onFinish: (answers: RedrockAnswers, times: RedrockTimes, timedOut: boolean) => void;
 }
 
-export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
+export function RedrockRun({ scenario, durationSec, label, exam = false, onFinish }: Props) {
   const { study, cases } = scenario;
+  const ui = UI_TEXT[scenario.lang];
+  const confirmLabels = { confirm: ui.confirm, cancel: ui.cancel };
   const [phase, setPhase] = useState<Phase>('investigation');
   const [caseIdx, setCaseIdx] = useState(0);
+  const [feedbackFor, setFeedbackFor] = useState<string | null>(null);
   const [answers, setAnswers] = useState<RedrockAnswers>(() => emptyRedrockAnswers(scenario));
   const [expr, setExpr] = useState('');
   const [calcHistory, setCalcHistory] = useState<CalcHistoryItem[]>([]);
   const [flash, setFlash] = useState('');
-  const marks = useRef<Partial<Record<Phase | 'end', number>>>({});
   const finished = useRef(false);
   const answersRef = useRef(answers);
   answersRef.current = answers;
+  // Tiempo acumulado por fase (se puede ir y volver entre Investigación y Análisis).
+  const phaseTime = useRef<Record<Phase, number>>({ investigation: 0, analysis: 0, report: 0, cases: 0 });
+  const lastSwitch = useRef(Date.now());
+  const phaseRef = useRef<Phase>('investigation');
+  const caseStart = useRef(0);
+
+  const flush = () => {
+    const now = Date.now();
+    phaseTime.current[phaseRef.current] += (now - lastSwitch.current) / 1000;
+    lastSwitch.current = now;
+  };
 
   const finish = (timedOut: boolean) => {
     if (finished.current) return;
     finished.current = true;
-    const t0 = startedAt;
-    const end = Date.now();
-    const m = marks.current;
-    const span = (a: number | undefined, b: number | undefined) => (a ? ((b ?? end) - a) / 1000 : 0);
+    flush();
+    const t = phaseTime.current;
     const times: RedrockTimes = {
-      investigation: span(t0, m.analysis),
-      analysis: span(m.analysis, m.report),
-      report: span(m.report, m.cases),
-      cases: span(m.cases, undefined),
-      study: span(t0, m.cases),
+      investigation: t.investigation,
+      analysis: t.analysis,
+      report: t.report,
+      cases: t.cases,
+      study: t.investigation + t.analysis + t.report,
     };
     onFinish(answersRef.current, times, timedOut);
   };
 
-  const { remaining, startedAt, now } = useCountdown(durationSec, () => finish(true));
+  const { remaining, now } = useCountdown(durationSec, () => finish(true));
   const goto = (p: Phase) => {
-    marks.current[p] = Date.now();
+    flush();
+    phaseRef.current = p;
+    if (p === 'cases') caseStart.current = Date.now();
     setPhase(p);
     window.scrollTo(0, 0);
   };
 
-  const studyElapsed = ((marks.current.cases ?? now) - startedAt) / 1000;
-  const casesElapsed = marks.current.cases ? (now - marks.current.cases) / 1000 : 0;
+  const phaseElapsed = phaseTime.current[phase] + (now - lastSwitch.current) / 1000;
+  const caseElapsed = phase === 'cases' ? (now - caseStart.current) / 1000 : 0;
 
   const toggleDatum = (id: string) => {
     const a = answersRef.current;
@@ -77,7 +83,7 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
       return;
     }
     if (a.journal.length >= JOURNAL_MAX) {
-      setFlash(`El diario está lleno (máx. ${JOURNAL_MAX}). Quita una entrada para guardar otra.`);
+      setFlash(ui.journalFull(JOURNAL_MAX));
       setTimeout(() => setFlash(''), 2500);
       return;
     }
@@ -88,34 +94,73 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
 
   const journal = (
     <Journal
+      ui={ui}
       entries={answers.journal.map((id) => study.data[id])}
+      calcs={answers.calcs}
       editable={phase === 'investigation'}
       onRemove={(id) => toggleDatum(id)}
-      onInsert={phase !== 'investigation' ? (d) => insert(String(d.value)) : undefined}
+      onInsert={phase !== 'investigation' ? (v) => insert(v) : undefined}
     />
   );
-  const calc = <Calculator expr={expr} setExpr={setExpr} history={calcHistory} setHistory={setCalcHistory} />;
+  const calc = (
+    <Calculator
+      expr={expr}
+      setExpr={setExpr}
+      history={calcHistory}
+      setHistory={setCalcHistory}
+      labels={{ title: ui.calculator, history: ui.history, clear: ui.clear, save: ui.saveToJournal }}
+      onSave={
+        phase === 'cases'
+          ? undefined
+          : (item) =>
+              setAnswers((a) => (a.calcs.some((c) => c.expr === item.expr && c.result === item.result) ? a : { ...a, calcs: [...a.calcs, item] }))
+      }
+    />
+  );
+
+  const guide = TIMING.redrockPhaseGuideSec[phase];
+  const curIdx = PHASE_ORDER.indexOf(phase);
+  const currentCase = cases[caseIdx];
+  const showFeedback = !exam && feedbackFor === currentCase?.id;
+
+  const nextCase = () => {
+    setFeedbackFor(null);
+    if (caseIdx < cases.length - 1) {
+      setCaseIdx(caseIdx + 1);
+      caseStart.current = Date.now();
+    } else finish(false);
+  };
 
   return (
     <div className="run">
       <header className="run-header">
         <div className="run-title">
           <span className="brand-dot" /> {label ?? 'Redrock Study'}
-          <span className="seed-chip">semilla {scenario.seed} · {scenario.difficulty === 'hard' ? 'Difícil' : 'Normal'}</span>
+          <span className="seed-chip">
+            {scenario.seed} · {scenario.difficulty === 'hard' ? 'Difícil' : 'Normal'} · {scenario.lang.toUpperCase()}
+            {exam ? ' · examen' : ''}
+          </span>
         </div>
         <ol className="stepper">
-          {PHASES.map((p, i) => {
-            const cur = PHASES.findIndex((x) => x.key === phase);
-            return (
-              <li key={p.key} className={i === cur ? 'active' : i < cur ? 'done' : ''}>
-                {p.label}
-              </li>
-            );
-          })}
+          {PHASE_ORDER.map((p, i) => (
+            <li key={p} className={i === curIdx ? 'active' : i < curIdx ? 'done' : ''}>
+              {ui.phases[p]}
+            </li>
+          ))}
         </ol>
         <div className="guide">
-          <span className={studyElapsed > 23 * 60 && phase !== 'cases' ? 'over' : ''}>Estudio {fmtTime(studyElapsed)} / ≈23:00</span>
-          <span className={casesElapsed > 12 * 60 ? 'over' : ''}>Casos {fmtTime(casesElapsed)} / ≈12:00</span>
+          {!exam && (
+            <>
+              <span className={phaseElapsed > guide ? 'over' : ''}>
+                {ui.phases[phase]} {fmtTime(phaseElapsed)} / ≈{fmtTime(guide)}
+              </span>
+              {phase === 'cases' && (
+                <span className={caseElapsed > TIMING.perCaseGuideSec ? 'over' : ''}>
+                  {ui.caseOf(caseIdx + 1, cases.length)} {fmtTime(caseElapsed)} / ≈{fmtTime(TIMING.perCaseGuideSec)}
+                </span>
+              )}
+            </>
+          )}
         </div>
         <TimerBadge remaining={remaining} total={durationSec} />
       </header>
@@ -126,20 +171,17 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
         <div className="layout">
           <main className="main">
             <div className="objective">
-              <div className="objective-label">Objetivo de la investigación</div>
+              <div className="objective-label">{ui.objective}</div>
               <div className="objective-text">{study.objective}</div>
             </div>
-            <p className="hint">
-              Haz clic en las cifras que necesites para guardarlas en el diario de investigación (máx. {JOURNAL_MAX}). En la siguiente fase el material
-              desaparece: solo tendrás el diario.
-            </p>
+            {!exam && <p className="hint">{ui.investigationHint(JOURNAL_MAX)}</p>}
             {study.materials.map((m) => (
-              <MaterialView key={m.id} m={m} data={study.data} saved={saved} onClick={toggleDatum} />
+              <MaterialView key={m.id} ui={ui} m={m} data={study.data} saved={saved} onClick={toggleDatum} />
             ))}
             <div className="actions">
-              <ConfirmButton warning="Pasarás a Análisis y el material dejará de verse. No podrás volver." onConfirm={() => goto('analysis')}>
-                Ir a Análisis →
-              </ConfirmButton>
+              <button type="button" className="btn primary" onClick={() => goto('analysis')}>
+                {ui.goAnalysis}
+              </button>
             </div>
           </main>
           <aside className="side">{journal}</aside>
@@ -150,16 +192,19 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
         <div className="layout">
           <main className="main">
             <div className="objective small">
-              <div className="objective-label">Objetivo de la investigación</div>
+              <div className="objective-label">{ui.objective}</div>
               <div className="objective-text">{study.objective}</div>
             </div>
-            <p className="hint">Responde con los datos del diario. Haz clic en una entrada del diario para insertarla en la calculadora.</p>
+            {!exam && <p className="hint">{ui.analysisHint}</p>}
             {study.questions.map((q, i) => (
               <div key={q.id} className="card question">
-                <div className="q-num">Pregunta {i + 1}</div>
+                <div className="q-num">
+                  {ui.question} {i + 1}
+                </div>
                 <div className="q-prompt">{q.prompt}</div>
                 <div className="q-meta">
-                  {roundText(q.decimals)} · tolerancia aceptada ±{q.tolerance}
+                  {ui.round(q.decimals)}
+                  {!exam && ` · ${ui.tolerance} ±${q.tolerance}`}
                 </div>
                 <div className="answer-row">
                   <input
@@ -167,15 +212,18 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
                     inputMode="decimal"
                     value={answers.analysis[q.id] ?? ''}
                     onChange={(e) => setAnswers((a) => ({ ...a, analysis: { ...a.analysis, [q.id]: e.target.value } }))}
-                    aria-label={`Respuesta pregunta ${i + 1}`}
+                    aria-label={`${ui.question} ${i + 1}`}
                   />
                   <span className="unit">{q.unit}</span>
                 </div>
               </div>
             ))}
             <div className="actions">
-              <ConfirmButton warning="Pasarás a Informe. Las respuestas de Análisis quedarán fijadas." onConfirm={() => goto('report')}>
-                Ir a Informe →
+              <button type="button" className="btn ghost btn-back" onClick={() => goto('investigation')}>
+                ← {ui.phases.investigation}
+              </button>
+              <ConfirmButton labels={confirmLabels} warning={ui.warnReport} onConfirm={() => goto('report')}>
+                {ui.goReport}
               </ConfirmButton>
             </div>
           </main>
@@ -200,11 +248,11 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
                     const set = (v: string) => setAnswers((a) => ({ ...a, blanks: { ...a.blanks, [b.id]: v } }));
                     if (b.kind === 'number')
                       return (
-                        <input key={i} className="blank-input" inputMode="decimal" value={val} placeholder="___" onChange={(e) => set(e.target.value)} aria-label={`Hueco ${b.id}`} />
+                        <input key={i} className="blank-input" inputMode="decimal" value={val} placeholder="___" onChange={(e) => set(e.target.value)} aria-label={b.id} />
                       );
                     return (
-                      <select key={i} className="blank-select" value={val} onChange={(e) => set(e.target.value)} aria-label={`Hueco ${b.id}`}>
-                        <option value="">— elige —</option>
+                      <select key={i} className="blank-select" value={val} onChange={(e) => set(e.target.value)} aria-label={b.id}>
+                        <option value="">{ui.choose}</option>
                         {b.options!.map((o, oi) => (
                           <option key={oi} value={oi}>
                             {o}
@@ -218,18 +266,18 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
             </div>
 
             <div className="card">
-              <div className="q-num">Tarea de gráfico</div>
+              <div className="q-num">{ui.chartTask}</div>
               <div className="q-prompt">{study.chartTask.message}</div>
               <div className="chart-type-row">
                 {CHART_TYPES.map((c) => (
                   <button
-                    key={c.key}
+                    key={c}
                     type="button"
-                    className={`chart-type ${answers.chartType === c.key ? 'selected' : ''}`}
-                    onClick={() => setAnswers((a) => ({ ...a, chartType: c.key }))}
+                    className={`chart-type ${answers.chartType === c ? 'selected' : ''}`}
+                    onClick={() => setAnswers((a) => ({ ...a, chartType: c }))}
                   >
-                    <MiniChartIcon type={c.key} />
-                    {c.label}
+                    <MiniChartIcon type={c} />
+                    {ui.chartTypes[c]}
                   </button>
                 ))}
               </div>
@@ -246,9 +294,9 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
                           return { ...a, chartValues: cv };
                         })
                       }
-                      aria-label={`Valor para ${el.label}`}
+                      aria-label={el.label}
                     >
-                      <option value="">— valor —</option>
+                      <option value="">{ui.value}</option>
                       {study.chartTask.valueOptions.map((o, oi) => (
                         <option key={oi} value={oi}>
                           {o.text}
@@ -267,30 +315,25 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
                       type: answers.chartType,
                       title: 'preview',
                       labels: study.chartTask.elements.map((e) => e.label),
-                      series: [
-                        {
-                          name: 'value',
-                          values: answers.chartValues.map((v) => (v == null ? NaN : study.chartTask.valueOptions[v].value)),
-                        },
-                      ],
-                      decimals: study.chartTask.unit === '%' ? 1 : 0,
+                      series: [{ name: 'value', values: answers.chartValues.map((v) => (v == null ? NaN : study.chartTask.valueOptions[v].value)) }],
+                      decimals: study.chartTask.unit === '%' ? 2 : 0,
                     }}
                   />
                 </div>
               )}
             </div>
             <div className="actions">
-              <ConfirmButton warning="Cerrarás el estudio y empezarán los 6 casos. No podrás volver." onConfirm={() => goto('cases')}>
-                Terminar el estudio e ir a Casos →
+              <ConfirmButton labels={confirmLabels} warning={ui.warnCases} onConfirm={() => goto('cases')}>
+                {ui.goCases}
               </ConfirmButton>
             </div>
           </main>
           <aside className="side">
             <div className="panel">
-              <div className="panel-title">Tus resultados de Análisis</div>
+              <div className="panel-title">{ui.yourAnalysis}</div>
               {study.questions.map((q, i) => (
                 <div key={q.id} className="mini-row">
-                  Q{i + 1}: <strong>{answers.analysis[q.id] || '—'}</strong> {q.unit}
+                  {ui.question} {i + 1}: <strong>{answers.analysis[q.id] || '—'}</strong> {q.unit}
                 </div>
               ))}
             </div>
@@ -300,54 +343,23 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
         </div>
       )}
 
-      {phase === 'cases' && (
+      {phase === 'cases' && currentCase && (
         <div className="layout">
           <main className="main">
-            {(() => {
-              const c = cases[caseIdx];
-              const val = answers.cases[c.id] ?? '';
-              const set = (v: string) => setAnswers((a) => ({ ...a, cases: { ...a.cases, [c.id]: v } }));
-              return (
-                <div className="card case">
-                  <div className="q-num">
-                    Caso {caseIdx + 1} de {cases.length}
-                  </div>
-                  <p>{c.intro}</p>
-                  {c.table && <SimpleTable {...c.table} />}
-                  {c.chart && (
-                    <div className="material-chart">
-                      <div className="material-title">{c.chart.title}</div>
-                      <Chart spec={c.chart} />
-                    </div>
-                  )}
-                  <div className="q-prompt">{c.prompt}</div>
-                  {c.format === 'mcq' ? (
-                    <div className="options">
-                      {c.options!.map((o, oi) => (
-                        <label key={oi} className={`option ${val === String(oi) ? 'selected' : ''}`}>
-                          <input type="radio" name={c.id} checked={val === String(oi)} onChange={() => set(String(oi))} />
-                          <span className="opt-letter">{String.fromCharCode(65 + oi)}</span> {o}
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="answer-row">
-                      <input className="num-input" inputMode="decimal" value={val} onChange={(e) => set(e.target.value)} aria-label="Respuesta" />
-                      <span className="unit">{c.unit}</span>
-                      <span className="q-meta">{roundText(c.decimals)}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+            <CaseView ui={ui} c={currentCase} index={caseIdx} total={cases.length} answers={answers} setAnswers={setAnswers} locked={showFeedback} />
+            {showFeedback && <CaseFeedback c={currentCase} raw={answers.cases[currentCase.id]} />}
             <div className="actions">
-              {caseIdx < cases.length - 1 ? (
-                <ConfirmButton warning="No podrás volver a este caso." onConfirm={() => setCaseIdx(caseIdx + 1)}>
-                  Siguiente caso →
-                </ConfirmButton>
+              {showFeedback ? (
+                <button type="button" className="btn primary" onClick={nextCase}>
+                  {caseIdx < cases.length - 1 ? ui.nextCase : ui.finishRedrock}
+                </button>
               ) : (
-                <ConfirmButton warning="Terminarás Redrock y verás la corrección." onConfirm={() => finish(false)}>
-                  Terminar Redrock
+                <ConfirmButton
+                  labels={confirmLabels}
+                  warning={caseIdx < cases.length - 1 ? ui.warnNextCase : ui.warnFinishRedrock}
+                  onConfirm={() => (exam ? nextCase() : setFeedbackFor(currentCase.id))}
+                >
+                  {caseIdx < cases.length - 1 ? ui.nextCase : ui.finishRedrock}
                 </ConfirmButton>
               )}
             </div>
@@ -359,38 +371,123 @@ export function RedrockRun({ scenario, durationSec, label, onFinish }: Props) {
   );
 }
 
-function roundText(decimals: number): string {
-  if (decimals === 0) return 'Redondea al número entero';
-  return `Redondea a ${decimals} decimal${decimals === 1 ? '' : 'es'}`;
+function CaseView({
+  ui,
+  c,
+  index,
+  total,
+  answers,
+  setAnswers,
+  locked,
+}: {
+  ui: UI;
+  c: CaseQuestion;
+  index: number;
+  total: number;
+  answers: RedrockAnswers;
+  setAnswers: (f: (a: RedrockAnswers) => RedrockAnswers) => void;
+  locked: boolean;
+}) {
+  const val = answers.cases[c.id] ?? '';
+  const set = (v: string) => !locked && setAnswers((a) => ({ ...a, cases: { ...a.cases, [c.id]: v } }));
+  return (
+    <div className="card case">
+      <div className="q-num">{ui.caseOf(index + 1, total)}</div>
+      <p>{c.intro}</p>
+      {c.table && <SimpleTable {...c.table} />}
+      {c.chart && (
+        <div className="material-chart">
+          <div className="material-title">{c.chart.title}</div>
+          <Chart spec={c.chart} />
+        </div>
+      )}
+      <div className="q-prompt">{c.prompt}</div>
+      {c.format === 'mcq' ? (
+        <div className="options">
+          {c.options!.map((o, oi) => (
+            <label key={oi} className={`option ${val === String(oi) ? 'selected' : ''}`}>
+              <input type="radio" name={c.id} checked={val === String(oi)} disabled={locked} onChange={() => set(String(oi))} />
+              <span className="opt-letter">{String.fromCharCode(65 + oi)}</span> {o}
+            </label>
+          ))}
+        </div>
+      ) : (
+        <div className="answer-row">
+          <input className="num-input" inputMode="decimal" value={val} readOnly={locked} onChange={(e) => set(e.target.value)} aria-label={ui.question} />
+          <span className="unit">{c.unit}</span>
+          <span className="q-meta">{ui.round(c.decimals)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Solución inmediata del mini-caso (solo en modo práctica). */
+function CaseFeedback({ c, raw }: { c: CaseQuestion; raw: string | undefined }) {
+  const ok = gradeCase(c, raw);
+  const correct = c.format === 'mcq' ? c.options![c.correctIndex!] : `${fmt(c.answer, c.decimals)} ${c.unit}`;
+  return (
+    <div className={`card feedback ${ok ? 'ok' : 'ko'}`}>
+      <div className="review-head">
+        <span className="q-num">Corrección · {c.typeLabel}</span>
+        <span className={`verdict ${ok ? 'ok' : 'ko'}`}>{ok ? '✓ Correcto' : '✗ Incorrecto'}</span>
+      </div>
+      <div className="answers-compare">
+        <span>
+          Respuesta correcta: <strong>{correct}</strong>
+        </span>
+      </div>
+      <div className="steps">
+        <ol>
+          {c.steps.map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ol>
+        <div className="trap">
+          <strong>Trampa:</strong> {c.trap}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Journal({
+  ui,
   entries,
+  calcs,
   editable,
   onRemove,
   onInsert,
 }: {
+  ui: UI;
   entries: Datum[];
+  calcs: { expr: string; result: string }[];
   editable: boolean;
   onRemove: (id: string) => void;
-  onInsert?: (d: Datum) => void;
+  onInsert?: (value: string) => void;
 }) {
   return (
     <div className="panel journal">
       <div className="panel-title">
-        Diario de investigación <span className="count">{entries.length}/{JOURNAL_MAX}</span>
+        {ui.journal} <span className="count">{entries.length}/{JOURNAL_MAX}</span>
       </div>
-      {entries.length === 0 && <div className="muted small">Vacío. Haz clic en cifras del material para guardarlas.</div>}
+      {entries.length === 0 && <div className="muted small">{ui.journalEmpty}</div>}
       {entries.map((d) => (
         <div key={d.id} className="journal-entry">
-          <button type="button" className="journal-main" onClick={onInsert ? () => onInsert(d) : undefined} disabled={!onInsert} title={onInsert ? 'Insertar en la calculadora' : undefined}>
+          <button
+            type="button"
+            className="journal-main"
+            onClick={onInsert ? () => onInsert(String(d.value)) : undefined}
+            disabled={!onInsert}
+            title={onInsert ? ui.insertInCalc : undefined}
+          >
             <span className="j-value">
               {d.display} <span className="j-unit">{d.unit}</span>
             </span>
             <span className="j-label">{d.label}</span>
           </button>
           {editable && (
-            <button type="button" className="icon-btn" onClick={() => onRemove(d.id)} aria-label={`Quitar ${d.label}`}>
+            <button type="button" className="icon-btn" onClick={() => onRemove(d.id)} aria-label={`${ui.remove} ${d.label}`}>
               ×
             </button>
           )}
@@ -399,17 +496,35 @@ function Journal({
       {Array.from({ length: Math.max(0, JOURNAL_MAX - entries.length) }).map((_, i) => (
         <div key={`e${i}`} className="journal-empty" />
       ))}
+      {calcs.length > 0 && (
+        <>
+          <div className="journal-section">{ui.calculator}</div>
+          {calcs.map((c, i) => (
+            <button
+              key={i}
+              type="button"
+              className="journal-main calc-entry"
+              onClick={onInsert ? () => onInsert(c.result) : undefined}
+              disabled={!onInsert}
+              title={onInsert ? ui.insertInCalc : undefined}
+            >
+              <span className="j-value">{c.result}</span>
+              <span className="j-label">{c.expr}</span>
+            </button>
+          ))}
+        </>
+      )}
     </div>
   );
 }
 
-function DatumButton({ d, mark, saved, onClick }: { d: Datum; mark?: string; saved: boolean; onClick: (id: string) => void }) {
+function DatumButton({ ui, d, mark, saved, onClick }: { ui: UI; d: Datum; mark?: string; saved: boolean; onClick: (id: string) => void }) {
   return (
     <button
       type="button"
       className={`datum ${saved ? 'saved' : ''}`}
       onClick={() => onClick(d.id)}
-      title={saved ? 'Guardado: clic para quitar' : 'Guardar en el diario'}
+      title={saved ? ui.savedClickToRemove : ui.saveToJournal}
       aria-label={`${d.display}${mark ?? ''} ${d.unit}`}
       aria-pressed={saved}
     >
@@ -419,12 +534,16 @@ function DatumButton({ d, mark, saved, onClick }: { d: Datum; mark?: string; sav
   );
 }
 
-function MaterialView({ m, data, saved, onClick }: { m: Material; data: Record<string, Datum>; saved: Set<string>; onClick: (id: string) => void }) {
+function MaterialView({ ui, m, data, saved, onClick }: { ui: UI; m: Material; data: Record<string, Datum>; saved: Set<string>; onClick: (id: string) => void }) {
   if (m.kind === 'paragraph')
     return (
       <section className="material">
         <div className="material-title">{m.title}</div>
-        <p>{m.segments.map((s, i) => (typeof s === 'string' ? <span key={i}>{s}</span> : <DatumButton key={i} d={data[s.datum]} saved={saved.has(s.datum)} onClick={onClick} />))}</p>
+        <p>
+          {m.segments.map((s, i) =>
+            typeof s === 'string' ? <span key={i}>{s}</span> : <DatumButton key={i} ui={ui} d={data[s.datum]} saved={saved.has(s.datum)} onClick={onClick} />,
+          )}
+        </p>
       </section>
     );
   if (m.kind === 'table')
@@ -445,7 +564,7 @@ function MaterialView({ m, data, saved, onClick }: { m: Material; data: Record<s
                 <td className="row-label">{r.label}</td>
                 {r.cells.map((c, ci) => (
                   <td key={ci} className="num">
-                    {c.datum ? <DatumButton d={data[c.datum]} mark={c.mark} saved={saved.has(c.datum)} onClick={onClick} /> : c.text}
+                    {c.datum ? <DatumButton ui={ui} d={data[c.datum]} mark={c.mark} saved={saved.has(c.datum)} onClick={onClick} /> : c.text}
                   </td>
                 ))}
               </tr>
@@ -490,21 +609,6 @@ function MiniChartIcon({ type }: { type: ChartType }) {
           <path d="M17 13 L17 2 A11 11 0 0 1 27 17 Z" fill={c} />
         </g>
       )}
-      {type === 'scatter' && (
-        <g fill={c}>
-          {[
-            [5, 19],
-            [10, 14],
-            [15, 17],
-            [20, 9],
-            [26, 11],
-            [30, 5],
-          ].map(([x, y], i) => (
-            <circle key={i} cx={x} cy={y} r={2.3} />
-          ))}
-        </g>
-      )}
     </svg>
   );
 }
-

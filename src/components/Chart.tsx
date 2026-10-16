@@ -34,7 +34,7 @@ export function Chart({ spec, width = 560, height = 260, onDatumClick, savedIds 
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * max);
 
   const label = (x: number, yy: number, v: number, id?: string, key?: string) => {
-    if (!Number.isFinite(v)) return null;
+    if (!Number.isFinite(v) || spec.showValues === false) return null;
     const clickable = !!id && !!onDatumClick;
     const saved = id ? savedIds?.has(id) : false;
     return (
