@@ -44,8 +44,9 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
   const dayStart = useRef(Date.now());
   const stepStart = useRef(Date.now());
   const finished = useRef(false);
-  const state = useRef({ cur, done, step });
-  state.current = { cur, done, step };
+  const touched = useRef(new Set<string>());
+  const state = useRef({ cur, done, step, dayIdx });
+  state.current = { cur, done, step, dayIdx };
 
   const finishAll = (answers: IslandDayAnswer[], timedOut: boolean) => {
     if (finished.current) return;
@@ -57,7 +58,9 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
     const s = state.current;
     const answers = s.done.slice();
     // La asignación inicial (por cargos) solo cuenta si llegaste a confirmarla o a tocarla
-    if (answers.length < sc.days.length) answers.push({ ...s.cur, assign: s.step === 'explore' ? {} : s.cur.assign, timeSec: (Date.now() - dayStart.current) / 1000 });
+    const touchedToday = sc.researchers.some((r) => touched.current.has(`${s.dayIdx}-${r.id}`));
+    const counts = s.step !== 'explore' && (s.step !== 'assign' || touchedToday);
+    if (answers.length < sc.days.length) answers.push({ ...s.cur, assign: counts ? s.cur.assign : {}, timeSec: (Date.now() - dayStart.current) / 1000 });
     while (answers.length < sc.days.length) answers.push({ ...emptyIslandDay(sc, answers.length), assign: {} });
     finishAll(answers, true);
   });
@@ -93,7 +96,6 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
   const bijective = sc.researchers.every((r) => cur.assign[r.id]) && sc.stations.every((s) => counts.get(s.id) === 1);
   const movedByYou = sc.researchers.filter((r) => cur.assign[r.id] && cur.assign[r.id] !== day.baseline[r.id]);
   const reasonsDone = movedByYou.every((r) => cur.reasons[r.id]);
-  const touched = useRef(new Set<string>());
   const setAssign = (rid: string, sid: string) => {
     const prev = cur.assign[rid];
     if (prev === sid) return;

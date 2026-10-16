@@ -404,7 +404,7 @@ function tryGenerate(rng: Rng, seed: string, difficulty: Difficulty, lang: Lang)
       if (!spare.length) continue dayTry;
       const low = rng.pick(spare);
       researchers.forEach((r) => {
-        if (!overloaded[r.id]) workload[r.id] = r.id === low.id ? 'low' : rng.pick(['mid', 'mid', 'high'] as Level[]);
+        if (!overloaded[r.id]) workload[r.id] = r.id === low.id ? 'low' : 'mid';
       });
       const support = makeSupport(rng, lang, researchers, stations, d, low.id);
       const nKeys = keyTargets.size + 1;
@@ -988,7 +988,7 @@ export function answerText(sc: IslandScenario, answers: IslandDayAnswer[], d: nu
           ? 'and I have room for more work.'
           : 'y tengo margen para más trabajo.'
         : en
-          ? 'and my workload is manageable.'
-          : 'y mi carga de trabajo es llevadera.';
+          ? "and I'm at capacity: I can handle my own work, but I have no room for more."
+          : 'y voy justo/a: llevo bien lo mío, pero no tengo margen para más.';
   return `${moodText}, ${loadText}`;
 }
