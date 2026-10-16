@@ -288,3 +288,15 @@ code { background: var(--line-soft); padding: 1px 6px; border-radius: 4px; font-
 .btn-back { margin-right: auto; }
 .actions { gap: 10px; }
 .review-line.neutral { border-color: var(--line); background: #faf9f6; }
+
+.classify-card { display: flex; gap: 20px; align-items: flex-start; }
+.classify-card .microbe { flex: 0 0 380px; }
+.microbe.big .microbe-name { font-size: 17px; }
+.microbe.big .attr-row { font-size: 15px; grid-template-columns: 1fr 110px 26px; }
+.classify-actions { display: flex; flex-direction: column; gap: 10px; min-width: 180px; }
+.next-hint { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.btn-pair { display: inline-flex; gap: 6px; }
+.efficacy { font-size: 48px; color: var(--accent); margin: 4px 0 8px; }
+.stats.compact .stat-value { font-size: 20px; }
+.bottleneck { background: var(--amber-soft); border-radius: 8px; padding: 8px 12px; font-size: 14px; margin: 8px 0 12px; }
+.missed { margin: 6px 0; padding-left: 18px; font-size: 14px; }

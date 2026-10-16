@@ -2,31 +2,57 @@ import { useRef, useState } from 'react';
 import { ConfirmButton, TraitIcon, TraitTag } from '../components/ui';
 import { TimerBadge, useCountdown } from '../components/Timer';
 import { fmtTime } from '../lib/format';
-import { LIST_MAX, Microbe, PICK, SeaWolfScenario, Zone, ZoneAnswer, zoneMicrobes } from '../seawolf';
+import { TIMING } from '../config';
+import { UI_TEXT, UI } from '../i18n';
+import {
+  checkSelection,
+  CLASSIFY_N,
+  Decision,
+  emptyZoneAnswer,
+  Microbe,
+  microbeIndex,
+  PICK,
+  POOL_MAX,
+  POOL_START_MAX,
+  ROUNDS,
+  SeaWolfScenario,
+  traitLabel,
+  Zone,
+  ZoneAnswer,
+} from '../seawolf';
 
 interface Props {
   scenario: SeaWolfScenario;
   durationSec: number;
   initialAids: boolean;
   label?: string;
+  /** Modo examen: sin ayudas, sin pistas de método y sin ver la eficacia hasta el final. */
+  exam?: boolean;
   onFinish: (answers: ZoneAnswer[], aidsUsed: boolean, timedOut: boolean) => void;
 }
 
-type Stage = { kind: 'wave'; wave: number } | { kind: 'select' };
+type Step = 'review' | 'classify' | 'rounds' | 'treatment' | 'efficacy';
 
-export function SeaWolfRun({ scenario, durationSec, initialAids, label, onFinish }: Props) {
+export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = false, onFinish }: Props) {
+  const ui = UI_TEXT[scenario.lang];
+  const lang = scenario.lang;
+  const en = lang === 'en';
+  const confirmLabels = { confirm: ui.confirm, cancel: ui.cancel };
+  const index = useRef(microbeIndex(scenario)).current;
   const [zoneIdx, setZoneIdx] = useState(0);
-  const [stage, setStage] = useState<Stage>({ kind: 'wave', wave: 0 });
-  const [list, setList] = useState<string[]>([]);
-  const [savedEver, setSavedEver] = useState<string[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [aids, setAids] = useState(initialAids);
-  const [aidsUsed, setAidsUsed] = useState(initialAids);
+  const [step, setStep] = useState<Step>('classify');
+  const [deferredIn, setDeferredIn] = useState<string[]>([]);
+  const [reviewDecisions, setReviewDecisions] = useState<Record<string, 'keep' | 'reject'>>({});
+  const [classifyIdx, setClassifyIdx] = useState(0);
+  const [cur, setCur] = useState<ZoneAnswer>(emptyZoneAnswer);
+  const [roundIdx, setRoundIdx] = useState(0);
+  const [aids, setAids] = useState(!exam && initialAids);
+  const [aidsUsed, setAidsUsed] = useState(!exam && initialAids);
   const [done, setDone] = useState<ZoneAnswer[]>([]);
   const zoneStart = useRef(Date.now());
   const finished = useRef(false);
-  const state = useRef({ zoneIdx, list, savedEver, selected, done, aidsUsed });
-  state.current = { zoneIdx, list, savedEver, selected, done, aidsUsed };
+  const state = useRef({ cur, done, aidsUsed });
+  state.current = { cur, done, aidsUsed };
 
   const finishAll = (answers: ZoneAnswer[], timedOut: boolean) => {
     if (finished.current) return;
@@ -37,178 +63,328 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, onFinish
   const { remaining, now } = useCountdown(durationSec, () => {
     const s = state.current;
     const answers = s.done.slice();
-    answers.push({ saved: s.savedEver, selected: s.selected, timeSec: (Date.now() - zoneStart.current) / 1000, completed: false });
-    while (answers.length < scenario.zones.length) answers.push({ saved: [], selected: [], timeSec: 0, completed: false });
+    if (answers.length < scenario.zones.length) answers.push({ ...s.cur, timeSec: (Date.now() - zoneStart.current) / 1000, completed: false });
+    while (answers.length < scenario.zones.length) answers.push(emptyZoneAnswer());
     finishAll(answers, true);
   });
 
   const zone = scenario.zones[zoneIdx];
-  const byId = new Map(zoneMicrobes(zone).map((m) => [m.id, m]));
+  const nextZone = scenario.zones[zoneIdx + 1];
   const zoneElapsed = (now - zoneStart.current) / 1000;
+  const isLast = zoneIdx === scenario.zones.length - 1;
+  const poolStartFull = cur.pool.length >= POOL_START_MAX;
 
-  const toggleSave = (id: string) => {
-    if (list.includes(id)) {
-      setList(list.filter((x) => x !== id));
-      return;
-    }
-    if (list.length >= LIST_MAX) return;
-    setList([...list, id]);
-    if (!savedEver.includes(id)) setSavedEver([...savedEver, id]);
+  // --- revisión de los aplazados desde el sitio anterior
+  const decideReview = (id: string, d: 'keep' | 'reject') => {
+    if (reviewDecisions[id]) return;
+    if (d === 'keep' && poolStartFull) return;
+    setReviewDecisions({ ...reviewDecisions, [id]: d });
+    if (d === 'keep') setCur({ ...cur, reviewKept: [...cur.reviewKept, id], pool: [...cur.pool, id] });
   };
+  const reviewDone = deferredIn.every((id) => reviewDecisions[id]);
+
+  // --- clasificación, uno a uno
+  const classifyCurrent = zone.classification[classifyIdx];
+  const decide = (d: Decision) => {
+    const m = classifyCurrent;
+    if (!m) return;
+    if (d === 'site' && poolStartFull) return;
+    if (d === 'next' && isLast) return;
+    setCur({ ...cur, decisions: { ...cur.decisions, [m.id]: d }, pool: d === 'site' ? [...cur.pool, m.id] : cur.pool });
+    if (classifyIdx + 1 >= CLASSIFY_N) setStep('rounds');
+    else setClassifyIdx(classifyIdx + 1);
+  };
+
+  // --- rondas de "elige 1 de 3"
+  const pickRound = (id: string) => {
+    const picks = [...cur.roundPicks];
+    picks[roundIdx] = id;
+    setCur({ ...cur, roundPicks: picks, pool: [...cur.pool, id] });
+    if (roundIdx + 1 >= ROUNDS) setStep('treatment');
+    else setRoundIdx(roundIdx + 1);
+  };
+
+  // --- tratamiento: se puede cambiar la selección hasta enviarla
   const toggleSelect = (id: string) => {
-    if (selected.includes(id)) setSelected(selected.filter((x) => x !== id));
-    else if (selected.length < PICK) setSelected([...selected, id]);
+    if (cur.selected.includes(id)) setCur({ ...cur, selected: cur.selected.filter((x) => x !== id) });
+    else if (cur.selected.length < PICK) setCur({ ...cur, selected: [...cur.selected, id] });
   };
 
-  const confirmZone = () => {
-    const ans: ZoneAnswer = { saved: savedEver, selected, timeSec: (Date.now() - zoneStart.current) / 1000, completed: true };
+  const advance = (ans: ZoneAnswer) => {
     const all = [...done, ans];
-    if (zoneIdx === scenario.zones.length - 1) {
+    if (isLast) {
       finishAll(all, false);
       return;
     }
+    const deferred = zone.classification.filter((m) => ans.decisions[m.id] === 'next').map((m) => m.id);
     setDone(all);
     setZoneIdx(zoneIdx + 1);
-    setStage({ kind: 'wave', wave: 0 });
-    setList([]);
-    setSavedEver([]);
-    setSelected([]);
+    setDeferredIn(deferred);
+    setReviewDecisions({});
+    setStep(deferred.length ? 'review' : 'classify');
+    setClassifyIdx(0);
+    setRoundIdx(0);
+    setCur(emptyZoneAnswer());
     zoneStart.current = Date.now();
     window.scrollTo(0, 0);
   };
 
-  const currentWave = stage.kind === 'wave' ? zone.waves[stage.wave] : [];
+  const submitZone = () => {
+    const ans: ZoneAnswer = { ...cur, timeSec: (Date.now() - zoneStart.current) / 1000, completed: true };
+    setCur(ans);
+    if (exam) advance(ans);
+    else setStep('efficacy');
+  };
+
+  const poolLimit = step === 'review' || step === 'classify' ? POOL_START_MAX : POOL_MAX;
+  const stepLabel: Record<Step, string> = en
+    ? { review: 'Review', classify: 'Sorting', rounds: 'Pick 1 of 3', treatment: 'Treatment', efficacy: 'Result' }
+    : { review: 'Revisión', classify: 'Clasificación', rounds: 'Elige 1 de 3', treatment: 'Tratamiento', efficacy: 'Resultado' };
 
   return (
     <div className="run seawolf">
       <header className="run-header">
         <div className="run-title">
           <span className="brand-dot sea" /> {label ?? 'Sea Wolf'}
-          <span className="seed-chip">semilla {scenario.seed} · {scenario.difficulty === 'hard' ? 'Difícil' : 'Normal'}</span>
+          <span className="seed-chip">
+            {scenario.seed} · {scenario.difficulty === 'hard' ? 'Difícil' : 'Normal'} · {lang.toUpperCase()}
+            {exam ? ' · examen' : ''}
+          </span>
         </div>
         <ol className="stepper">
           {scenario.zones.map((_, i) => (
             <li key={i} className={i === zoneIdx ? 'active' : i < zoneIdx ? 'done' : ''}>
-              Zona {i + 1}
+              {ui.zone} {i + 1}
+              {i === zoneIdx ? ` · ${stepLabel[step]}` : ''}
             </li>
           ))}
         </ol>
         <div className="guide">
-          <span className={zoneElapsed > zone.suggestedMin * 60 ? 'over' : ''}>
-            Zona {fmtTime(zoneElapsed)} / ≈{zone.suggestedMin}:00
-          </span>
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={aids}
-              onChange={(e) => {
-                setAids(e.target.checked);
-                if (e.target.checked) setAidsUsed(true);
-              }}
-            />
-            Ayudas de práctica
-          </label>
+          {!exam && (
+            <span className={zoneElapsed > TIMING.seawolfZoneGuideMin[zoneIdx] * 60 ? 'over' : ''}>
+              {ui.zone} {fmtTime(zoneElapsed)} / ≈{TIMING.seawolfZoneGuideMin[zoneIdx]}:00
+            </span>
+          )}
+          {!exam && (
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={aids}
+                onChange={(e) => {
+                  setAids(e.target.checked);
+                  if (e.target.checked) setAidsUsed(true);
+                }}
+              />
+              {ui.aids}
+            </label>
+          )}
         </div>
         <TimerBadge remaining={remaining} total={durationSec} />
       </header>
 
       <div className="layout">
         <main className="main">
-          <ZoneBrief zone={zone} aids={aids} />
+          <ZoneBrief zone={zone} ui={ui} aids={aids} />
 
-          {stage.kind === 'wave' && (
+          {step === 'review' && (
             <>
               <div className="wave-head">
-                <h2>
-                  Oleada {stage.wave + 1} de 3 <span className="muted">· llegan {currentWave.length} microbios</span>
-                </h2>
-                <p className="hint">
-                  Guarda los candidatos que quieras conservar (lista máx. {LIST_MAX}). Al pasar a la siguiente oleada, los no guardados se pierden.
-                </p>
+                <h2>{en ? 'Microbes deferred from the previous site' : 'Microbios aplazados desde el sitio anterior'}</h2>
+                {!exam && (
+                  <p className="hint">
+                    {en
+                      ? `Keep them for this site or reject them. The pool holds ${POOL_START_MAX} microbes before the rounds. Decisions are final.`
+                      : `Mantenlos para este sitio o recházalos. El pool admite ${POOL_START_MAX} microbios antes de las rondas. Las decisiones son definitivas.`}
+                  </p>
+                )}
               </div>
               <div className="microbe-grid">
-                {currentWave.map((m) => (
-                  <MicrobeCard
-                    key={m.id}
-                    m={m}
-                    zone={zone}
-                    action={
-                      <button
-                        type="button"
-                        className={`btn small ${list.includes(m.id) ? 'saved' : 'outline'}`}
-                        disabled={!list.includes(m.id) && list.length >= LIST_MAX}
-                        onClick={() => toggleSave(m.id)}
-                        aria-label={`${list.includes(m.id) ? 'Quitar' : 'Guardar'} ${m.name}`}
-                      >
-                        {list.includes(m.id) ? '✓ Guardado' : 'Guardar'}
-                      </button>
-                    }
-                    highlight={list.includes(m.id)}
-                  />
-                ))}
-              </div>
-              <div className="actions">
-                <ConfirmButton
-                  warning={stage.wave < 2 ? 'Los microbios no guardados de esta oleada se perderán.' : 'Pasarás a la selección final con tu lista.'}
-                  onConfirm={() => {
-                    setStage(stage.wave < 2 ? { kind: 'wave', wave: stage.wave + 1 } : { kind: 'select' });
-                    window.scrollTo(0, 0);
-                  }}
-                >
-                  {stage.wave < 2 ? `Siguiente oleada (${stage.wave + 2}/3) →` : 'Ir a la selección final →'}
-                </ConfirmButton>
-              </div>
-            </>
-          )}
-
-          {stage.kind === 'select' && (
-            <>
-              <div className="wave-head">
-                <h2>Selección final</h2>
-                <p className="hint">Elige exactamente {PICK} microbios de tu lista y confirma el tratamiento.</p>
-              </div>
-              {list.length === 0 && <div className="card">No guardaste ningún candidato. Confirma para pasar a la siguiente zona.</div>}
-              <div className="microbe-grid">
-                {list.map((id) => {
-                  const m = byId.get(id)!;
-                  const on = selected.includes(id);
+                {deferredIn.map((id) => {
+                  const m = index.get(id)!;
+                  const d = reviewDecisions[id];
                   return (
                     <MicrobeCard
                       key={id}
                       m={m}
                       zone={zone}
+                      ui={ui}
+                      highlight={d === 'keep'}
+                      action={
+                        d ? (
+                          <span className="tag">{d === 'keep' ? (en ? 'Kept' : 'Mantenido') : en ? 'Rejected' : 'Rechazado'}</span>
+                        ) : (
+                          <span className="btn-pair">
+                            <button type="button" className="btn small outline" disabled={poolStartFull} onClick={() => decideReview(id, 'keep')} aria-label={`${en ? 'Keep' : 'Mantener'} ${m.name}`}>
+                              {en ? 'Keep' : 'Mantener'}
+                            </button>
+                            <button type="button" className="btn small ghost" onClick={() => decideReview(id, 'reject')} aria-label={`${en ? 'Reject' : 'Rechazar'} ${m.name}`}>
+                              {en ? 'Reject' : 'Rechazar'}
+                            </button>
+                          </span>
+                        )
+                      }
+                    />
+                  );
+                })}
+              </div>
+              <div className="actions">
+                <button type="button" className="btn primary" disabled={!reviewDone} onClick={() => setStep('classify')}>
+                  {en ? 'Start sorting →' : 'Empezar la clasificación →'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 'classify' && classifyCurrent && (
+            <>
+              <div className="wave-head">
+                <h2>
+                  {en ? 'Sorting' : 'Clasificación'}{' '}
+                  <span className="muted">
+                    · {en ? 'microbe' : 'microbio'} {classifyIdx + 1} {en ? 'of' : 'de'} {CLASSIFY_N}
+                  </span>
+                </h2>
+                {!exam && (
+                  <p className="hint">
+                    {en
+                      ? `Send each microbe to this site (pool max. ${POOL_START_MAX}), to the next site, or reject it. Decisions are final.`
+                      : `Envía cada microbio a este sitio (pool máx. ${POOL_START_MAX}), al siguiente sitio o recházalo. Las decisiones son definitivas.`}
+                  </p>
+                )}
+                {nextZone && (
+                  <p className="next-hint">
+                    {en ? 'Hint about the next site: it favours' : 'Pista del siguiente sitio: favorece'} <TraitTag trait={nextZone.required} lang={lang} />
+                  </p>
+                )}
+              </div>
+              <div className="classify-card">
+                <MicrobeCard m={classifyCurrent} zone={zone} ui={ui} action={null} big />
+                <div className="classify-actions">
+                  <button type="button" className="btn primary" disabled={poolStartFull} onClick={() => decide('site')}>
+                    {en ? 'This site' : 'Este sitio'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn outline"
+                    disabled={isLast}
+                    onClick={() => decide('next')}
+                    title={isLast ? (en ? 'There is no next site' : 'No hay siguiente sitio') : undefined}
+                  >
+                    {en ? 'Next site' : 'Siguiente sitio'}
+                  </button>
+                  <button type="button" className="btn ghost" onClick={() => decide('reject')}>
+                    {en ? 'Reject' : 'Rechazar'}
+                  </button>
+                </div>
+                {poolStartFull && <p className="muted small">{en ? 'The pool is full for this stage.' : 'El pool está lleno en esta fase.'}</p>}
+              </div>
+            </>
+          )}
+
+          {step === 'rounds' && (
+            <>
+              <div className="wave-head">
+                <h2>
+                  {en ? 'Pick 1 of 3' : 'Elige 1 de 3'}{' '}
+                  <span className="muted">
+                    · {en ? 'round' : 'ronda'} {roundIdx + 1} {en ? 'of' : 'de'} {ROUNDS}
+                  </span>
+                </h2>
+                {!exam && (
+                  <p className="hint">
+                    {en
+                      ? 'Add one of these three microbes to your pool. The other two are lost. The choice is final.'
+                      : 'Añade uno de estos tres microbios a tu pool. Los otros dos se pierden. La elección es definitiva.'}
+                  </p>
+                )}
+              </div>
+              <div className="microbe-grid">
+                {zone.rounds[roundIdx].map((m) => (
+                  <MicrobeCard
+                    key={m.id}
+                    m={m}
+                    zone={zone}
+                    ui={ui}
+                    action={
+                      <button type="button" className="btn small outline" onClick={() => pickRound(m.id)} aria-label={`${ui.pick} ${m.name}`}>
+                        {ui.pick}
+                      </button>
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {step === 'treatment' && (
+            <>
+              <div className="wave-head">
+                <h2>{en ? 'Treatment' : 'Tratamiento'}</h2>
+                <p className="hint">{ui.selectionHint(PICK)}</p>
+              </div>
+              {cur.pool.length === 0 && <div className="card">{ui.noCandidates}</div>}
+              <div className="microbe-grid">
+                {cur.pool.map((id) => {
+                  const m = index.get(id)!;
+                  const on = cur.selected.includes(id);
+                  return (
+                    <MicrobeCard
+                      key={id}
+                      m={m}
+                      zone={zone}
+                      ui={ui}
                       highlight={on}
                       action={
-                        <button type="button" className={`btn small ${on ? 'saved' : 'outline'}`} disabled={!on && selected.length >= PICK} onClick={() => toggleSelect(id)} aria-label={`${on ? 'Quitar' : 'Elegir'} ${m.name}`}>
-                          {on ? '✓ Elegido' : 'Elegir'}
+                        <button
+                          type="button"
+                          className={`btn small ${on ? 'saved' : 'outline'}`}
+                          disabled={!on && cur.selected.length >= PICK}
+                          onClick={() => toggleSelect(id)}
+                          aria-label={`${on ? ui.remove : ui.pick} ${m.name}`}
+                        >
+                          {on ? ui.picked : ui.pick}
                         </button>
                       }
                     />
                   );
                 })}
               </div>
-              {aids && <AidsPanel zone={zone} picks={selected.map((id) => byId.get(id)!)} />}
+              {aids && <AidsPanel zone={zone} picks={cur.selected.map((id) => index.get(id)!)} />}
               <div className="actions">
                 <ConfirmButton
-                  disabled={selected.length !== PICK && list.length >= PICK}
-                  warning={zoneIdx < scenario.zones.length - 1 ? 'Confirmarás el tratamiento y pasarás a la siguiente zona.' : 'Confirmarás el tratamiento y terminarás Sea Wolf.'}
-                  onConfirm={confirmZone}
+                  labels={confirmLabels}
+                  disabled={cur.selected.length !== PICK && cur.pool.length >= PICK}
+                  warning={isLast ? ui.warnTreatmentLast : ui.warnTreatment}
+                  onConfirm={submitZone}
                 >
-                  Confirmar tratamiento ({selected.length}/{PICK})
+                  {ui.confirmTreatment(cur.selected.length, PICK)}
                 </ConfirmButton>
               </div>
             </>
+          )}
+
+          {step === 'efficacy' && (
+            <EfficacyCard
+              zone={zone}
+              picks={cur.selected.map((id) => index.get(id)!)}
+              en={en}
+              onNext={() => advance(cur)}
+              nextLabel={isLast ? (en ? 'Finish Sea Wolf' : 'Terminar Sea Wolf') : en ? 'Next site →' : 'Siguiente sitio →'}
+            />
           )}
         </main>
 
         <aside className="side">
           <div className="panel">
             <div className="panel-title">
-              Lista de candidatos <span className="count">{list.length}/{LIST_MAX}</span>
+              Pool{' '}
+              <span className="count">
+                {cur.pool.length}/{poolLimit}
+              </span>
             </div>
-            {list.length === 0 && <div className="muted small">Vacía.</div>}
-            {list.map((id) => {
-              const m = byId.get(id)!;
+            {cur.pool.length === 0 && <div className="muted small">{ui.listEmpty}</div>}
+            {cur.pool.map((id) => {
+              const m = index.get(id)!;
               return (
                 <div key={id} className="list-entry">
                   <div>
@@ -224,15 +400,16 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, onFinish
                       ))}
                     </div>
                   </div>
-                  {stage.kind === 'wave' && (
-                    <button type="button" className="icon-btn" onClick={() => toggleSave(id)} aria-label={`Quitar ${m.name}`}>
-                      ×
-                    </button>
-                  )}
                 </div>
               );
             })}
-            {stage.kind === 'wave' && <div className="muted small note">Quitar un microbio de una oleada anterior lo descarta para siempre.</div>}
+            {!exam && (
+              <div className="muted small note">
+                {en
+                  ? `Up to ${POOL_START_MAX} after sorting, +1 per round (max. ${POOL_MAX}). Microbes cannot be removed from the pool.`
+                  : `Hasta ${POOL_START_MAX} tras la clasificación, +1 por ronda (máx. ${POOL_MAX}). No se pueden quitar microbios del pool.`}
+              </div>
+            )}
           </div>
         </aside>
       </div>
@@ -249,23 +426,25 @@ function abbr(attr: string) {
     .toUpperCase();
 }
 
-function ZoneBrief({ zone, aids }: { zone: Zone; aids: boolean }) {
+function ZoneBrief({ zone, ui, aids }: { zone: Zone; ui: UI; aids: boolean }) {
   return (
     <div className="zone-brief card">
       <div className="zone-head">
         <div>
-          <div className="q-num">Zona {zone.index + 1}</div>
+          <div className="q-num">
+            {ui.zone} {zone.index + 1}
+          </div>
           <h2 className="zone-name">{zone.name}</h2>
           <div className="muted">{zone.description}</div>
         </div>
         <div className="rules-traits">
           <div>
-            <div className="rule-label">Requerido (al menos uno)</div>
-            <TraitTag trait={zone.required} tone="req" />
+            <div className="rule-label">{ui.required}</div>
+            <TraitTag trait={zone.required} tone="req" lang={zone.lang} />
           </div>
           <div>
-            <div className="rule-label">Prohibido (ninguno)</div>
-            <TraitTag trait={zone.prohibited} tone="proh" />
+            <div className="rule-label">{ui.prohibited}</div>
+            <TraitTag trait={zone.prohibited} tone="proh" lang={zone.lang} />
           </div>
         </div>
       </div>
@@ -275,8 +454,13 @@ function ZoneBrief({ zone, aids }: { zone: Zone; aids: boolean }) {
             <div className="range-label">{a}</div>
             <RangeBar lo={zone.ranges[i][0]} hi={zone.ranges[i][1]} />
             <div className="range-text">
-              Media objetivo {zone.ranges[i][0]}–{zone.ranges[i][1]}
-              {aids && <span className="aid"> · suma {zone.ranges[i][0] * 3}–{zone.ranges[i][1] * 3}</span>}
+              {ui.targetAverage} {zone.ranges[i][0]}–{zone.ranges[i][1]}
+              {aids && (
+                <span className="aid">
+                  {' '}
+                  · {ui.sumAid} {zone.ranges[i][0] * 3}–{zone.ranges[i][1] * 3}
+                </span>
+              )}
             </div>
           </div>
         ))}
@@ -295,9 +479,9 @@ function RangeBar({ lo, hi }: { lo: number; hi: number }) {
   );
 }
 
-function MicrobeCard({ m, zone, action, highlight }: { m: Microbe; zone: Zone; action: React.ReactNode; highlight?: boolean }) {
+function MicrobeCard({ m, zone, ui, action, highlight, big }: { m: Microbe; zone: Zone; ui: UI; action: React.ReactNode; highlight?: boolean; big?: boolean }) {
   return (
-    <div className={`microbe ${highlight ? 'highlight' : ''}`}>
+    <div className={`microbe ${highlight ? 'highlight' : ''} ${big ? 'big' : ''}`}>
       <div className="microbe-head">
         <span className="microbe-name">{m.name}</span>
         {action}
@@ -312,9 +496,9 @@ function MicrobeCard({ m, zone, action, highlight }: { m: Microbe; zone: Zone; a
         </div>
       ))}
       <div className="microbe-traits">
-        {m.traits.length === 0 && <span className="muted small">Sin rasgos especiales</span>}
+        {m.traits.length === 0 && <span className="muted small">{ui.noTraits}</span>}
         {m.traits.map((t) => (
-          <TraitTag key={t} trait={t} />
+          <TraitTag key={t} trait={t} lang={zone.lang} />
         ))}
       </div>
     </div>
@@ -352,17 +536,49 @@ function AidsPanel({ zone, picks }: { zone: Zone; picks: Microbe[] }) {
             );
           })}
           <tr>
-            <td>Rasgo requerido</td>
+            <td>Rasgo deseado</td>
             <td colSpan={2}>{picks.some((m) => m.traits.includes(zone.required)) ? 'presente' : 'ausente'}</td>
             <td>{picks.some((m) => m.traits.includes(zone.required)) ? '✓' : '✗'}</td>
           </tr>
           <tr>
-            <td>Rasgo prohibido</td>
+            <td>Rasgo no deseado</td>
             <td colSpan={2}>{picks.some((m) => m.traits.includes(zone.prohibited)) ? 'presente' : 'ausente'}</td>
             <td>{picks.some((m) => m.traits.includes(zone.prohibited)) ? '✗' : '✓'}</td>
           </tr>
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** Eficacia del tratamiento tras enviarlo (solo en práctica; en examen se ve al final). */
+function EfficacyCard({ zone, picks, en, onNext, nextLabel }: { zone: Zone; picks: Microbe[]; en: boolean; onNext: () => void; nextLabel: string }) {
+  const chk = checkSelection(zone, picks);
+  const eff = chk.valid ? 100 : Math.round((chk.rulesOk / chk.rulesTotal) * 100);
+  return (
+    <div className={`card feedback ${chk.valid ? 'ok' : 'ko'}`}>
+      <div className="q-num">{en ? 'Treatment efficacy' : 'Eficacia del tratamiento'}</div>
+      <h1 className="efficacy">{eff}%</h1>
+      {chk.valid ? (
+        <p className="ok-text">Cumple todas las reglas.</p>
+      ) : (
+        <ul className="violations">
+          {chk.violations.map((v, i) => (
+            <li key={i}>
+              <strong>{v.rule}:</strong> {v.detail}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="muted small">
+        Rasgo deseado «{traitLabel(zone.required, zone.lang)}», no deseado «{traitLabel(zone.prohibited, zone.lang)}». La corrección completa (tríos válidos, cuello de botella y
+        candidatos que faltaron) aparece al final.
+      </p>
+      <div className="actions">
+        <button type="button" className="btn primary" onClick={onNext}>
+          {nextLabel}
+        </button>
+      </div>
     </div>
   );
 }

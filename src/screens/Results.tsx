@@ -5,7 +5,7 @@ import { fmt, fmtTime } from '../lib/format';
 import { MODE_LABEL, Mode } from '../lib/history';
 import { gradeAnalysis, gradeBlank, gradeCase, gradeRedrock, RedrockAnswers, RedrockTimes } from '../redrock';
 import type { RedrockScenario } from '../redrock/types';
-import { gradeZone, methodSteps, SeaWolfScenario, traitLabel, ZoneAnswer, zoneMicrobes } from '../seawolf';
+import { gradeZone, Microbe, microbeIndex, methodSteps, SeaWolfScenario, traitLabel, ZoneAnswer, zoneInsights } from '../seawolf';
 
 export interface RedrockRunResult {
   scenario: RedrockScenario;
@@ -31,7 +31,8 @@ interface Props {
 }
 
 export function seaWolfScore(r: SeaWolfRunResult): number {
-  const g = r.scenario.zones.map((z, i) => gradeZone(z, r.answers[i]));
+  const index = microbeIndex(r.scenario);
+  const g = r.scenario.zones.map((z, i) => gradeZone(z, r.answers[i], index));
   return Math.round(g.reduce((s, x) => s + x.score, 0) / g.length);
 }
 
@@ -285,7 +286,8 @@ function Steps({ steps, trap }: { steps: string[]; trap: string }) {
 
 function SeaWolfReview({ r }: { r: SeaWolfRunResult }) {
   const { scenario: s, answers } = r;
-  const grades = s.zones.map((z, i) => gradeZone(z, answers[i]));
+  const index = microbeIndex(s);
+  const grades = s.zones.map((z, i) => gradeZone(z, answers[i], index));
   const valid = grades.filter((g) => g.check.valid).length;
   return (
     <section className="review">
@@ -294,23 +296,23 @@ function SeaWolfReview({ r }: { r: SeaWolfRunResult }) {
         {r.aidsUsed && <span className="tag">con ayudas de práctica</span>}
       </h2>
       <div className="stats">
-        <Stat label="Puntuación Sea Wolf" value={`${seaWolfScore(r)}%`} sub="media de reglas cumplidas por zona" />
-        <Stat label="Zonas válidas" value={`${valid}/${s.zones.length}`} />
+        <Stat label="Puntuación Sea Wolf" value={`${seaWolfScore(r)}%`} sub="media de eficacia por sitio (−20 % por regla fallida)" />
+        <Stat label="Sitios al 100 %" value={`${valid}/${s.zones.length}`} />
         {s.zones.map((z, i) => (
-          <Stat key={i} label={`Zona ${i + 1}`} value={`${grades[i].score}%`} sub={`${fmtTime(answers[i]?.timeSec ?? 0)} (guía ≈${z.suggestedMin}:00)`} />
+          <Stat key={i} label={`Sitio ${i + 1}`} value={`${grades[i].score}%`} sub={`${fmtTime(answers[i]?.timeSec ?? 0)} (guía ≈${z.suggestedMin}:00)`} />
         ))}
       </div>
       {s.zones.map((z, i) => {
         const g = grades[i];
         const ans = answers[i];
-        const all = zoneMicrobes(z);
-        const byId = new Map(all.map((m) => [m.id, m]));
+        const ins = zoneInsights(z, ans);
         const inSol = new Set(z.solutions.flat());
         return (
           <div key={i} className="card review-item">
             <div className="review-head">
               <span className="q-num">
-                Zona {i + 1} · {z.name}
+                Sitio {i + 1} · {z.name}
+                {z.extremeCarriers && <span className="tag warn">rasgo deseado solo con valores extremos</span>}
               </span>
               <Verdict ok={g.check.valid} />
             </div>
@@ -321,16 +323,24 @@ function SeaWolfReview({ r }: { r: SeaWolfRunResult }) {
                 </span>
               ))}
               <span>
-                Requerido: <TraitIcon trait={z.required} size={14} /> {traitLabel(z.required)}
+                Deseado: <TraitIcon trait={z.required} size={14} /> {traitLabel(z.required, z.lang)}
               </span>
               <span>
-                Prohibido: <TraitIcon trait={z.prohibited} size={14} /> {traitLabel(z.prohibited)}
+                No deseado: <TraitIcon trait={z.prohibited} size={14} /> {traitLabel(z.prohibited, z.lang)}
               </span>
+            </div>
+            <div className="stats compact">
+              <Stat label="Tríos válidos" value={ins.validTrios} sub="alcanzables con los candidatos del sitio" />
+              <Stat label="Casi válidos" value={ins.nearMisses} sub="fallan por una sola regla" />
+              <Stat label="Tu pool" value={`${ans.pool.length}`} sub={`${g.savedInSolution} formaban parte de alguna solución`} />
+            </div>
+            <div className="bottleneck">
+              <strong>Cuello de botella: {ins.bottleneck.rule}.</strong> {ins.bottleneck.explanation}
             </div>
             <div className="sw-columns">
               <div>
-                <div className="steps-title">Tu selección</div>
-                <MicrobeTable zone={z} ids={ans?.selected ?? []} byId={byId} inSol={inSol} />
+                <div className="steps-title">Tu tratamiento</div>
+                <MicrobeTable zone={z} ids={ans.selected} byId={index} inSol={inSol} />
                 {g.check.valid ? (
                   <p className="ok-text">Cumple todas las reglas.</p>
                 ) : (
@@ -345,16 +355,25 @@ function SeaWolfReview({ r }: { r: SeaWolfRunResult }) {
               </div>
               <div>
                 <div className="steps-title">Una solución válida</div>
-                <MicrobeTable zone={z} ids={g.exampleSolution} byId={byId} inSol={inSol} />
-                <p className="muted small">
-                  Esta zona tenía {z.solutions.length === 1 ? '1 combinación válida' : `${z.solutions.length} combinaciones válidas`} y {z.nearMisses} casi
-                  válidas (fallan por una sola regla).
-                </p>
+                <MicrobeTable zone={z} ids={g.exampleSolution} byId={index} inSol={inSol} />
               </div>
             </div>
             <div className="process">
-              <strong>Proceso:</strong> guardaste {g.savedTotal} candidato{g.savedTotal === 1 ? '' : 's'}; {g.savedInSolution} {g.savedInSolution === 1 ? 'formaba' : 'formaban'} parte de alguna solución (en
-              total, {inSol.size} microbios de esta zona aparecen en alguna solución).
+              {ins.poolHadSolution ? (
+                <p className="ok-text">Tu pool contenía al menos un trío válido.</p>
+              ) : (
+                <>
+                  <strong>Lo que debiste guardar:</strong>
+                  <ul className="missed">
+                    {ins.missed.map((m) => (
+                      <li key={m.microbe.id}>
+                        <strong>{m.microbe.name}</strong> ({m.microbe.attrs.join(' / ')}, {traitLabel(m.microbe.traits[0], z.lang)}) — {m.where} Aparece en {m.inSolutions}{' '}
+                        trío{m.inSolutions === 1 ? '' : 's'} válido{m.inSolutions === 1 ? '' : 's'}.
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
             <div className="steps">
               <div className="steps-title">Método recomendado</div>
@@ -371,7 +390,7 @@ function SeaWolfReview({ r }: { r: SeaWolfRunResult }) {
   );
 }
 
-function MicrobeTable({ zone, ids, byId, inSol }: { zone: SeaWolfScenario['zones'][number]; ids: string[]; byId: Map<string, ReturnType<typeof zoneMicrobes>[number]>; inSol: Set<string> }) {
+function MicrobeTable({ zone, ids, byId, inSol }: { zone: SeaWolfScenario['zones'][number]; ids: string[]; byId: Map<string, Microbe>; inSol: Set<string> }) {
   if (!ids.length) return <p className="muted">Sin selección.</p>;
   const ms = ids.map((id) => byId.get(id)!).filter(Boolean);
   return (
