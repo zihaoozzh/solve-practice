@@ -19,6 +19,8 @@ export interface Theme {
   programCap: string;
   siteA: string;
   siteB: string;
+  /** Sitio fuera del área de estudio (para anexos distractores sin contradecir el texto). */
+  siteC: string;
   censusName: string;
   monitoringName: string; // serie de otro periodo / método
   cohortName: string;
@@ -44,6 +46,7 @@ export const THEMES: Theme[] = [
     programCap: 'El programa de trasplante de coral',
     siteA: 'Arrecife Farol',
     siteB: 'Bajo Brisa',
+    siteC: 'Cala Serena',
     censusName: 'Censo anual del arrecife',
     monitoringName: 'Conteos de transectos de buceo en primavera',
     cohortName: 'Lote de trasplante',
@@ -73,6 +76,7 @@ export const THEMES: Theme[] = [
     programCap: 'El programa de restauración de gravas de desove',
     siteA: 'Cuenca Norte',
     siteB: 'Cuenca Sur',
+    siteC: 'Laguna Alta',
     censusName: 'Censo anual con redes de enmalle',
     monitoringName: 'Estimaciones de verano con ecosonda',
     cohortName: 'Lote de repoblación',
@@ -102,6 +106,7 @@ export const THEMES: Theme[] = [
     programCap: 'El programa de diques de captación de lluvia',
     siteA: 'Mesa Este',
     siteB: 'Mesa Oeste',
+    siteC: 'Mesa Sur',
     censusName: 'Censo anual de vegetación',
     monitoringName: 'Conteos de copas con dron en otoño',
     cohortName: 'Lote de plantación',
@@ -131,6 +136,7 @@ export const THEMES: Theme[] = [
     programCap: 'El programa de construcción de islas de nidificación',
     siteA: 'Marisma Interior',
     siteB: 'Flecha Exterior',
+    siteC: 'Islote del Faro',
     censusName: 'Censo anual de reproductores',
     monitoringName: 'Conteos de escala migratoria en otoño',
     cohortName: 'Cohorte anillada',
@@ -160,6 +166,7 @@ export const THEMES: Theme[] = [
     programCap: 'El programa de restauración de charcas',
     siteA: 'Charcas del Aliso',
     siteB: 'Charcas del Carrizal',
+    siteC: 'Charcas del Molino',
     censusName: 'Censo anual con trampas de caída',
     monitoringName: 'Conteos nocturnos con linterna',
     cohortName: 'Cohorte de cría asistida',

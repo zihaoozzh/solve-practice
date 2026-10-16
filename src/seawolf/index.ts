@@ -278,7 +278,7 @@ export function generateZone(rng: Rng, zi: number, difficulty: Difficulty, usedN
     shuffled.forEach((m) => (m.name = newName()));
     const waves = [0, 1, 2].map((w) => shuffled.slice(w * waveSize, (w + 1) * waveSize));
     const [name, description] = zoneInfo;
-    return {
+    const zone: Zone = {
       index: zi,
       name,
       description,
@@ -291,8 +291,48 @@ export function generateZone(rng: Rng, zi: number, difficulty: Difficulty, usedN
       nearMisses: res.nearMisses,
       suggestedMin: [8, 10, 12][zi],
     };
+    // Si la zona no es coherente o no tiene solución con los microbios que aparecen, se descarta.
+    if (validateZone(zone).length === 0) return zone;
   }
   throw new Error('No se pudo generar la zona');
+}
+
+export interface ZoneIssue {
+  code: string;
+  message: string;
+}
+
+/** Comprueba que una zona es coherente y que tiene al menos una solución con los microbios que aparecen. */
+export function validateZone(zone: Zone): ZoneIssue[] {
+  const issues: ZoneIssue[] = [];
+  const add = (code: string, message: string) => issues.push({ code, message });
+  const all = zoneMicrobes(zone);
+  if (zone.waves.length < 1 || zone.waves.some((w) => w.length === 0)) add('WAVES', 'Hay oleadas vacías.');
+  if (new Set(all.map((m) => m.id)).size !== all.length) add('IDS', 'Hay identificadores de microbio repetidos.');
+  if (new Set(all.map((m) => m.name)).size !== all.length) add('NAMES', 'Hay nombres de microbio repetidos.');
+  if (zone.required === zone.prohibited) add('TRAITS', 'El rasgo requerido y el prohibido son el mismo.');
+  if (zone.attributes.length !== zone.ranges.length) add('RANGES', 'Cada atributo necesita su rango.');
+  zone.ranges.forEach(([lo, hi], i) => {
+    if (!(lo >= 1 && hi <= 10 && lo <= hi)) add('RANGES', `Rango inválido para ${zone.attributes[i]}: ${lo}–${hi}.`);
+  });
+  for (const m of all) {
+    if (m.attrs.length !== zone.attributes.length || m.attrs.some((a) => !Number.isInteger(a) || a < 1 || a > 10))
+      add('ATTRS', `${m.name} tiene valores fuera de 1–10.`);
+    if (m.traits.some((t) => !TRAITS.some((d) => d.key === t))) add('TRAITS', `${m.name} tiene un rasgo desconocido.`);
+  }
+  if (!all.some((m) => m.traits.includes(zone.required) && !m.traits.includes(zone.prohibited)))
+    add('REQUIRED', 'Ningún microbio admisible tiene el rasgo requerido.');
+  const bf = bruteForce(zone, all);
+  if (bf.solutions.length === 0) add('NO_SOLUTION', 'No hay ninguna combinación válida con los microbios que aparecen.');
+  const key = (s: string[]) => s.slice().sort().join('|');
+  if (bf.solutions.map(key).sort().join(';') !== zone.solutions.map(key).sort().join(';'))
+    add('SOLUTIONS', 'La lista de soluciones guardada no coincide con la fuerza bruta.');
+  const byId = new Map(all.map((m) => [m.id, m]));
+  for (const sol of zone.solutions) {
+    const chk = checkSelection(zone, sol.map((id) => byId.get(id)!).filter(Boolean));
+    if (!chk.valid) add('SOLUTION_INVALID', `La solución ${sol.join(', ')} incumple alguna regla.`);
+  }
+  return issues;
 }
 
 function clamp(x: number) {

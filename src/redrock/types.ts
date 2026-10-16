@@ -12,6 +12,28 @@ export interface Datum {
   relevant: boolean;
   /** Explicación (ES) de por qué es una trampa o es irrelevante. */
   note?: string;
+  /** Metadatos estructurados para el validador de coherencia. */
+  meta?: { series: string; site?: string; year?: number; excludesJuveniles?: boolean };
+}
+
+/**
+ * Afirmación estructurada que hace un material. El generador la emite a la vez que el texto
+ * y el validador comprueba que las afirmaciones de todos los materiales son compatibles.
+ */
+export type Claim =
+  | { kind: 'site-role'; site: string; role: 'intervention' | 'reference' | 'external' }
+  | { kind: 'activity'; site: string; row: number }
+  | { kind: 'excludes-juveniles'; year: number }
+  | { kind: 'juvenile-count'; year: number; site: string; datum: string }
+  | { kind: 'already-included'; year: number; site: string; datum: string }
+  | { kind: 'period'; series: 'census' | 'monitoring' | 'environment' | 'releases'; from: number; to: number };
+
+export interface StudyFacts {
+  siteA: string;
+  siteB: string;
+  period: [number, number];
+  censusYears: number[];
+  footnoteYear: number;
 }
 
 export type Segment = string | { datum: string };
@@ -25,7 +47,7 @@ export interface ChartSpec {
   decimals?: number;
 }
 
-export type Material =
+export type Material = (
   | { kind: 'paragraph'; id: string; title: string; segments: Segment[] }
   | {
       kind: 'table';
@@ -35,10 +57,13 @@ export type Material =
       rows: { label: string; cells: { datum?: string; text?: string; mark?: string }[] }[];
       footnotes: string[];
     }
-  | { kind: 'chart'; id: string; chart: ChartSpec; footnotes: string[] };
+  | { kind: 'chart'; id: string; chart: ChartSpec; footnotes: string[] }
+) & { claims?: Claim[] };
 
 export interface NumericQuestion {
   id: string;
+  /** Qué se calcula (para que el validador pueda recalcularlo). */
+  kind: 'pct-total-A' | 'pct-total-B' | 'density-ha' | 'density-km2' | 'ratio-B-A';
   prompt: string;
   unit: string;
   decimals: number;
@@ -89,6 +114,7 @@ export interface Study {
   memo: MemoPart[][];
   blanks: ReportBlank[];
   chartTask: ChartTask;
+  facts: StudyFacts;
 }
 
 export interface CaseTable {

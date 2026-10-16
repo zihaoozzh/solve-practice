@@ -1,6 +1,7 @@
 import { Rng, round } from '../lib/rng';
 import { fmt, fmtAuto } from '../lib/format';
 import type { Theme } from './themes';
+import { validateStudy } from './validate';
 import type {
   ChartTask,
   ChartType,
@@ -84,11 +85,11 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
   };
   const u = t.unitWord;
   years.forEach((y, i) => {
-    add({ id: `A${i + 1}`, value: aTable[i], display: fmt(aTable[i]), unit: u, label: `Censo ${t.siteA} ${y}${i === footYearIdx ? ' (sin juveniles)' : ''}` });
-    add({ id: `B${i + 1}`, value: bTableK[i], display: fmt(bTableK[i], 1), unit: `miles de ${u}`, label: `Censo ${t.siteB} ${y}${i === footYearIdx ? ' (sin juveniles)' : ''}` });
+    add({ id: `A${i + 1}`, value: aTable[i], display: fmt(aTable[i]), unit: u, label: `Censo ${t.siteA} ${y}${i === footYearIdx ? ' (sin juveniles)' : ''}`, meta: { series: 'census', site: t.siteA, year: y, excludesJuveniles: i === footYearIdx } });
+    add({ id: `B${i + 1}`, value: bTableK[i], display: fmt(bTableK[i], 1), unit: `miles de ${u}`, label: `Censo ${t.siteB} ${y}${i === footYearIdx ? ' (sin juveniles)' : ''}`, meta: { series: 'census', site: t.siteB, year: y, excludesJuveniles: i === footYearIdx } });
   });
-  add({ id: 'JA', value: jA, display: fmt(jA), unit: u, label: `Juveniles ${t.siteA} ${yf}` });
-  add({ id: 'JB', value: jB, display: fmt(jB), unit: u, label: `Juveniles ${t.siteB} ${yf}` });
+  add({ id: 'JA', value: jA, display: fmt(jA), unit: u, label: `Juveniles ${t.siteA} ${yf}`, meta: { series: 'juveniles', site: t.siteA, year: yf } });
+  add({ id: 'JB', value: jB, display: fmt(jB), unit: u, label: `Juveniles ${t.siteB} ${yf}`, meta: { series: 'juveniles', site: t.siteB, year: yf } });
 
   // Juveniles de otro año (trampa de periodo)
   const otherIdx = footYearIdx === 3 ? 1 : 2;
@@ -99,6 +100,7 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
     display: fmt(jTrap),
     unit: u,
     label: `Juveniles ${t.siteA} ${years[otherIdx]}`,
+    meta: { series: 'juveniles-included', site: t.siteA, year: years[otherIdx] },
     note: `Juveniles de ${years[otherIdx]}: el censo de ese año ya los incluye, así que no hay que sumarlos.`,
   });
 
@@ -147,7 +149,7 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
 
   // Cohortes (solo Difícil, irrelevante)
   const cohorts = hard
-    ? [0, 1, 2].map((i) => ({ released: roundTo(rng.int(120, 900), 10), surv: rng.int(18, 74), site: i === 2 ? t.siteB : t.siteA }))
+    ? [0, 1, 2].map((i) => ({ released: roundTo(rng.int(120, 900), 10), surv: rng.int(18, 74), site: i === 2 ? t.siteC : t.siteA }))
     : [];
   cohorts.forEach((c, i) => {
     add({ id: `CR${i}`, value: c.released, display: fmt(c.released), unit: u, label: `${t.cohortName} ${String.fromCharCode(65 + i)}: liberados`, note: 'Datos de cohortes liberadas: plausibles pero no forman parte del censo que pide el objetivo.' });
@@ -163,6 +165,7 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
   const q1Ans = pct(aTot[0], aTot[3]);
   const q1: NumericQuestion = {
     id: 'Q1',
+    kind: 'pct-total-A',
     prompt: `Según el ${t.censusName.toLowerCase()}, ¿cuál fue el cambio porcentual de la población TOTAL de ${t.species} (adultos y juveniles) en ${t.siteA} entre ${y1} y ${y4}?`,
     unit: '%',
     decimals: qDec,
@@ -187,6 +190,7 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
   const q3Ans = pct(bTot1, bTot4);
   const q3: NumericQuestion = {
     id: 'Q3',
+    kind: 'pct-total-B',
     prompt: `Según el ${t.censusName.toLowerCase()}, ¿cuál fue el cambio porcentual de la población TOTAL de ${t.species} (adultos y juveniles) en ${t.siteB} entre ${y1} y ${y4}?`,
     unit: '%',
     decimals: qDec,
@@ -218,6 +222,7 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
     const target = perHa ? 'por hectárea' : 'por kilómetro cuadrado (km²)';
     q2 = {
       id: 'Q2',
+      kind: perHa ? 'density-ha' : 'density-km2',
       prompt: `¿Cuál fue la densidad de ${t.species} (población total, incluidos juveniles) en el área censada de ${t.siteA} en ${y4}, en ${u} ${target}?`,
       unit: perHa ? `${u}/ha` : `${u}/km²`,
       decimals: dec,
@@ -242,6 +247,7 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
     const ans = bTot4 / aTot4;
     q2 = {
       id: 'Q2',
+      kind: 'ratio-B-A',
       prompt: `En ${y4}, ¿cuántas veces mayor fue la población TOTAL de ${t.species} en ${t.siteB} que en ${t.siteA}? (Exprésalo como ratio: ${t.siteB} ÷ ${t.siteA}.)`,
       unit: '×',
       decimals: 2,
@@ -287,6 +293,10 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
     kind: 'paragraph',
     id: 'intro',
     title: 'Antecedentes del proyecto',
+    claims: [
+      { kind: 'site-role', site: t.siteA, role: 'intervention' },
+      { kind: 'site-role', site: t.siteB, role: 'reference' },
+    ],
     segments: [
       `${t.programCap} comenzó en ${y1} en ${t.siteA}, uno de los dos puntos de seguimiento de la reserva de ${t.region}. La reserva ocupa una superficie total de `,
       S('RES'),
@@ -304,6 +314,10 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
     kind: 'table',
     id: 'census',
     title: `${t.censusName} — ${t.species}`,
+    claims: [
+      { kind: 'excludes-juveniles', year: yf },
+      { kind: 'period', series: 'census', from: y1, to: y4 },
+    ],
     columns: ['Sitio', ...years.map(String)],
     rows: [
       { label: `${t.siteA} (${u})`, cells: years.map((_, i) => ({ datum: `A${i + 1}`, mark: i === footYearIdx ? '*' : undefined })) },
@@ -316,6 +330,11 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
     kind: 'paragraph',
     id: 'fieldnote',
     title: `Notas de campo, temporada ${yf}`,
+    claims: [
+      { kind: 'juvenile-count', year: yf, site: t.siteA, datum: 'JA' },
+      { kind: 'juvenile-count', year: yf, site: t.siteB, datum: 'JB' },
+      { kind: 'already-included', year: years[otherIdx], site: t.siteA, datum: 'JX' },
+    ],
     segments: [
       `Por un cambio en el protocolo de muestreo, en ${yf} los juveniles (${t.juveniles}) se contaron en hojas aparte: `,
       S('JA'),
@@ -332,6 +351,7 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
   const monChart: Material = {
     kind: 'chart',
     id: 'monchart',
+    claims: [{ kind: 'period', series: 'monitoring', from: monYears[0], to: monYears[3] }],
     chart: {
       type: 'line',
       title: `${t.siteA}: ${t.monitoringName.toLowerCase()}, ${monYears[0]}–${monYears[3]}`,
@@ -345,6 +365,7 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
   const envChart: Material = {
     kind: 'chart',
     id: 'envchart',
+    claims: [{ kind: 'period', series: 'environment', from: y1, to: y4 }],
     chart: {
       type: 'bar',
       title: `${env1.label} en ${t.siteA}, ${y1}–${y4}`,
@@ -363,12 +384,20 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
       kind: 'table',
       id: 'cohorts',
       title: `Liberaciones por ${t.cohortName.toLowerCase()}, ${y1}–${y1 + 1}`,
+      claims: [
+        { kind: 'site-role', site: t.siteC, role: 'external' },
+        { kind: 'period', series: 'releases', from: y1, to: y1 + 1 },
+        ...cohorts.map((c, i) => ({ kind: 'activity' as const, site: c.site, row: i })),
+      ],
       columns: [t.cohortName, 'Liberado en', `Número liberado (${u})`, 'Supervivencia al año (%)'],
       rows: cohorts.map((c, i) => ({
         label: String.fromCharCode(65 + i),
         cells: [{ text: c.site }, { datum: `CR${i}` }, { datum: `CS${i}` }],
       })),
-      footnotes: ['Los individuos liberados llevan marca; en el censo se cuentan como cualquier otro individuo.'],
+      footnotes: [
+        'Los individuos liberados llevan marca; en el censo se cuentan como cualquier otro individuo.',
+        `${t.siteC} está fuera del área de estudio: sus liberaciones no afectan a ninguno de los dos censos.`,
+      ],
     });
   }
   materials.push(...rng.shuffle(rest));
@@ -466,7 +495,7 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
 
   const chartTask = makeChartTask(rng, t, { y1, y4, yf, q1Ans, q3Ans, aTable, aTot, jA, footYearIdx, bTableK, bTot });
 
-  return {
+  const study: Study = {
     theme: t.nameEs,
     objective: `Determinar si ${t.program} aumentó la tasa de crecimiento de la población de ${t.species} en ${t.siteA}, en comparación con el sitio de referencia ${t.siteB}, entre ${y1} y ${y4}.`,
     context: `Reserva de ${t.region}: evaluación ${del(t.program)}`,
@@ -477,7 +506,10 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
     memo,
     blanks: [b1, ppBlank, b3, b4],
     chartTask,
+    facts: { siteA: t.siteA, siteB: t.siteB, period: [y1, y4], censusYears: years, footnoteYear: yf },
   };
+  // Si el texto, las tablas o las notas se contradicen, se descarta y se genera otro.
+  return validateStudy(study).length === 0 ? study : null;
 }
 
 function makeChartTask(

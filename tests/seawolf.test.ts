@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bruteForce, checkSelection, generateSeaWolf, gradeZone, zoneMicrobes } from '../src/seawolf';
+import { bruteForce, checkSelection, generateSeaWolf, gradeZone, validateZone, zoneMicrobes } from '../src/seawolf';
 
 const SEEDS = Array.from({ length: 500 }, (_, i) => `seed-${i}`);
 
@@ -20,6 +20,7 @@ describe('Sea Wolf generator', () => {
           expect(z.required).not.toBe(z.prohibited);
           all.forEach((m) => m.attrs.forEach((a) => expect(a >= 1 && a <= 10).toBe(true)));
 
+          expect(validateZone(z)).toEqual([]);
           // fuerza bruta independiente
           const bf = bruteForce(z, all);
           expect(bf.solutions.length, `${seed} zona ${z.index}`).toBeGreaterThanOrEqual(1);
@@ -55,5 +56,14 @@ describe('Sea Wolf generator', () => {
 
   it('es determinista con la misma semilla', () => {
     expect(JSON.stringify(generateSeaWolf('XYZ', 'hard'))).toBe(JSON.stringify(generateSeaWolf('XYZ', 'hard')));
+  });
+
+  it('el validador detecta una zona sin solución', () => {
+    const z = JSON.parse(JSON.stringify(generateSeaWolf('broken', 'normal').zones[0]));
+    // nadie tiene el rasgo requerido -> no hay solución posible
+    zoneMicrobes(z).forEach((m) => (m.traits = m.traits.filter((t: string) => t !== z.required)));
+    const codes = validateZone(z).map((i) => i.code);
+    expect(codes).toContain('REQUIRED');
+    expect(codes).toContain('NO_SOLUTION');
   });
 });
