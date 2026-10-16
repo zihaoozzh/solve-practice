@@ -374,3 +374,8 @@ code { background: var(--line-soft); padding: 1px 6px; border-radius: 4px; font-
 .verdict.partial { background: var(--amber-soft); color: #8a4c17; }
 .island .actions, .classic .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
 .mission p { margin: 6px 0 10px; }
+.notes-area { width: 100%; min-height: 260px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: inherit; font-size: 14px; resize: vertical; }
+.outcome { background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; }
+.option-list .option.fb-best { border-color: var(--ok); background: var(--ok-soft); }
+.option-list .option.fb-ok { border-color: var(--amber); background: var(--amber-soft); }
+.option-list .option.fb-poor { border-color: var(--ko); background: var(--ko-soft); }

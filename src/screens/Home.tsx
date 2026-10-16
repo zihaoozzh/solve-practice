@@ -36,6 +36,12 @@ const MODES: { key: Mode; title: string; minutes: number; desc: string }[] = [
     desc: '3 días dirigiendo a 4 investigadores en 4 estaciones: pocas preguntas al día, asignaciones con motivo, peticiones de apoyo y valoración del equipo.',
   },
   {
+    key: 'sfl-classic',
+    title: 'SFL Classic',
+    minutes: min(TIMING.sflClassicSec),
+    desc: 'La versión de las invitaciones de 85 min: briefing que no se puede releer, ranking de 4 iniciativas y 12 decisiones encadenadas hasta decidir si escalar.',
+  },
+  {
     key: 'full',
     title: 'Simulación 65 min',
     minutes: min(TIMING.redrockSec + TIMING.seawolfSec),

@@ -4,12 +4,14 @@ import { generateRedrock } from '../src/redrock';
 import { validateStudy } from '../src/redrock/validate';
 import { generateSeaWolf, validateZone } from '../src/seawolf';
 import { generateIsland, validateIsland } from '../src/sfl/island';
+import { generateClassic, validateClassic } from '../src/sfl/classic';
 
 const N = Number(process.argv[2] ?? 50);
 let failures = 0;
 let rr = 0;
 let sw = 0;
 let isl = 0;
+let cl = 0;
 for (const lang of ['es', 'en'] as const)
   for (const diff of ['normal', 'hard'] as const)
     for (let i = 0; i < N; i++) {
@@ -44,6 +46,20 @@ for (const lang of ['es', 'en'] as const)
         console.log(`SFL Island ${lang} ${seed}: ${String(e)}`);
       }
       isl++;
+      try {
+        const c = generateClassic(seed, diff, lang);
+        const ci = validateClassic(c);
+        const other = generateClassic(seed, diff, lang === 'es' ? 'en' : 'es');
+        if (other.correctRanking.join() !== c.correctRanking.join() || other.results.join() !== c.results.join()) ci.push({ code: 'LANG', message: 'El escenario cambia según el idioma.' });
+        if (ci.length) {
+          failures++;
+          console.log(`SFL Classic ${lang} ${seed}:`, ci.map((x) => x.message).join(' | '));
+        }
+      } catch (e) {
+        failures++;
+        console.log(`SFL Classic ${lang} ${seed}: ${String(e)}`);
+      }
+      cl++;
     }
-console.log(`Redrock: ${rr} escenarios · Sea Wolf: ${sw} escenarios (${sw * 3} zonas) · SFL Island: ${isl} escenarios (${isl * 3} días) · ${N} por módulo, dificultad e idioma · fallos del validador: ${failures}`);
+console.log(`Redrock: ${rr} escenarios · Sea Wolf: ${sw} escenarios (${sw * 3} zonas) · SFL Island: ${isl} escenarios (${isl * 3} días) · SFL Classic: ${cl} escenarios · ${N} por módulo, dificultad e idioma · fallos del validador: ${failures}`);
 process.exit(failures ? 1 : 0);

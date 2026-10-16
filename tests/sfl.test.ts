@@ -11,6 +11,16 @@ import {
 } from '../src/sfl/island';
 import { gradeIsland, islandPatterns } from '../src/sfl/islandGrade';
 import { overall, T } from '../src/analysis/rubric';
+import {
+  ClassicAnswers,
+  ClassicScenario,
+  classicPatterns,
+  emptyClassic,
+  generateClassic,
+  gradeClassic,
+  validateClassic,
+  variantFor,
+} from '../src/sfl/classic';
 
 /** Juega un día "como un experto": pregunta lo clave, asigna lo óptimo, mejores respuestas, urgente primero, reflexión exacta. */
 function perfectPlay(sc: IslandScenario): IslandDayAnswer[] {
@@ -183,5 +193,101 @@ describe('SFL Island: corrección', () => {
     // La corrección explica cuándo había que conseguir la información
     const missed = g.decisions.find((d) => d.step === 'explore' && d.ok === false)!;
     expect(missed.when).toMatch(/Día 1, fase Explorar/);
+  });
+});
+
+// ---------------------------------------------------------------- SFL Classic
+
+
+/** Juega el clásico eligiendo en cada pantalla la opción de la calidad pedida (por defecto, la mejor). */
+function playClassic(sc: ClassicScenario, pickFor: (n: number) => 'best' | 'ok' | 'poor' = () => 'best', ranking = sc.correctRanking): ClassicAnswers {
+  const a = emptyClassic();
+  a.ranking = ranking.slice();
+  a.timeSec.briefing = 120;
+  for (const d of sc.decisions) {
+    const key = variantFor(sc, a, d.n);
+    a.shown[d.n] = key;
+    a.choices[d.n] = d.variants[key].options.findIndex((o) => o.quality === pickFor(d.n));
+  }
+  return a;
+}
+
+describe('SFL Classic', () => {
+  it('genera 13 tareas válidas, deterministas e iguales en los dos idiomas', () => {
+    for (let i = 0; i < 40; i++) {
+      const diff = i % 2 ? 'hard' : 'normal';
+      const es = generateClassic(`k${i}`, diff, 'es');
+      const en = generateClassic(`k${i}`, diff, 'en');
+      expect(validateClassic(es)).toEqual([]);
+      expect(es.decisions).toHaveLength(12);
+      expect(en.correctRanking).toEqual(es.correctRanking);
+      expect(en.results).toEqual(es.results);
+      es.decisions.forEach((d, k) =>
+        Object.keys(d.variants).forEach((v) => expect(en.decisions[k].variants[v].options.map((o) => o.quality)).toEqual(d.variants[v].options.map((o) => o.quality))),
+      );
+      if (diff === 'hard') expect(es.dependency).not.toBeNull();
+    }
+    expect(JSON.stringify(generateClassic('same', 'normal'))).toBe(JSON.stringify(generateClassic('same', 'normal')));
+  });
+
+  it('el validador rechaza un ranking sin orden claro y un escalado que no cuadra con los datos', () => {
+    const sc = generateClassic('bad', 'normal');
+    const tie: ClassicScenario = JSON.parse(JSON.stringify(sc));
+    tie.initiatives[1].scores = { ...tie.initiatives[0].scores };
+    expect(validateClassic(tie).map((x) => x.code)).toContain('RANKING');
+    const wrong: ClassicScenario = JSON.parse(JSON.stringify(sc));
+    wrong.results = wrong.results.map(() => wrong.target + 5);
+    wrong.results[0] = wrong.target - 5;
+    const meetsAll = sc.results.every((r) => r >= sc.target);
+    const meetsSome = sc.results.some((r) => r >= sc.target) && !meetsAll;
+    if (!meetsSome) expect(validateClassic(wrong).map((x) => x.code)).toContain('SCALE');
+  });
+
+  it('el juego perfecto suma 100 y cada decisión vale 7,5', () => {
+    for (let i = 0; i < 10; i++) {
+      const sc = generateClassic(`pp${i}`, 'hard');
+      const g = gradeClassic(sc, playClassic(sc));
+      expect(g.rubric.max).toBe(100);
+      expect(g.rubric.earned).toBe(100);
+      expect(g.rubric.parts.find((p) => p.key === 'cl-decisions')!.items.every((x) => x.max === 7.5)).toBe(true);
+      expect(g.decisions.every((d) => d.ok === true)).toBe(true);
+    }
+  });
+
+  it('las decisiones anteriores cambian la situación y la mejor respuesta de las posteriores', () => {
+    const sc = generateClassic('chain', 'hard');
+    // Alargar el análisis (6) deja sin margen la 8 y cambia su mejor respuesta
+    const slack = playClassic(sc);
+    const tight = playClassic(sc, (n) => (n === 6 ? 'ok' : 'best'));
+    expect(variantFor(sc, slack, 8)).toBe('slack');
+    expect(tight.shown[8]).toBe('tight');
+    const best8 = (key: string) => sc.decisions.find((d) => d.n === 8)!.variants[key].options.find((o) => o.quality === 'best')!.text;
+    expect(best8('slack')).not.toBe(best8('tight'));
+    // Un indicador que no mide el objetivo (2) obliga a corregir en la 11
+    expect(playClassic(sc, (n) => (n === 2 ? 'poor' : 'best')).shown[11]).toBe('other');
+    // Poner primero la iniciativa que depende de otra bloquea el piloto (12)
+    const dep = sc.dependency!;
+    const badRanking = [dep.dependent, ...sc.correctRanking.filter((x) => x !== dep.dependent)];
+    const blocked = playClassic(sc, () => 'best', badRanking);
+    expect(blocked.shown[12]).toBe('blocked');
+    const g = gradeClassic(sc, blocked);
+    expect(g.rubric.parts[0].items.find((i) => i.errorType === 'sfl-c-dependency')).toBeTruthy();
+    expect(classicPatterns(sc, blocked, g).map((p) => p.id)).toContain('sfl-chain');
+    expect(g.decisions.find((d) => d.id === 'cl-d12')!.why).toMatch(/ranking/);
+  });
+
+  it('los puntos perdidos suman exactamente 100 − nota y detecta el briefing leído deprisa', () => {
+    for (let i = 0; i < 30; i++) {
+      const sc = generateClassic(`rand${i}`, 'normal');
+      const q = ['best', 'ok', 'poor'] as const;
+      const a = playClassic(sc, (n) => q[(n * 7 + i) % 3], [...sc.correctRanking].reverse());
+      if (i % 4 === 0) delete a.choices[5];
+      a.timeSec.briefing = 20;
+      const g = gradeClassic(sc, a);
+      const o = overall([g.rubric]);
+      expect(o.pointsOff.reduce((s, p) => s + T(p.lost), 0)).toBe(T(g.rubric.max) - T(g.rubric.earned));
+      expect(Math.round(o.pointsOff.reduce((s, p) => s + p.pct, 0) * 10)).toBe(1000 - Math.round(o.scorePct * 10));
+      expect(classicPatterns(sc, a, g).map((p) => p.id)).toContain('sfl-briefing-fast');
+    }
   });
 });

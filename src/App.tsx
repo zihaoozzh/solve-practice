@@ -15,8 +15,11 @@ import { IslandRun } from './screens/IslandRun';
 import { SflReview } from './screens/SflReview';
 import { generateIsland, IslandDayAnswer, IslandScenario } from './sfl/island';
 import { gradeIsland, IslandDecision, islandContext, islandPatterns, islandTimes } from './sfl/islandGrade';
+import { ClassicRun } from './screens/ClassicRun';
+import { ClassicAnswers, ClassicScenario, classicContext, classicPatterns, classicTimes, generateClassic, gradeClassic } from './sfl/classic';
+import type { SflDecisionView } from './screens/SflReview';
 
-type Module = 'redrock' | 'seawolf' | 'sfl-island';
+type Module = 'redrock' | 'seawolf' | 'sfl-island' | 'sfl-classic';
 
 interface IslandRunResult {
   scenario: IslandScenario;
@@ -24,10 +27,17 @@ interface IslandRunResult {
   timedOut: boolean;
 }
 
+interface ClassicRunResult {
+  scenario: ClassicScenario;
+  answers: ClassicAnswers;
+  timedOut: boolean;
+}
+
 interface Collected {
   redrock?: RedrockRunResult;
   seawolf?: SeaWolfRunResult;
   island?: IslandRunResult;
+  classic?: ClassicRunResult;
 }
 type Screen = 'home' | 'stats' | 'run' | 'interlude' | 'results';
 
@@ -37,10 +47,10 @@ const PLAN: Record<Mode, Module[]> = {
   full: ['redrock', 'seawolf'],
   full95: ['redrock', 'seawolf', 'sfl-island'],
   'sfl-island': ['sfl-island'],
-  'sfl-classic': [],
+  'sfl-classic': ['sfl-classic'],
 };
 
-const MODULE_LABEL: Record<Module, string> = { redrock: 'Redrock Study', seawolf: 'Sea Wolf', 'sfl-island': 'SFL Island' };
+const MODULE_LABEL: Record<Module, string> = { redrock: 'Redrock Study', seawolf: 'Sea Wolf', 'sfl-island': 'SFL Island', 'sfl-classic': 'SFL Classic' };
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -51,6 +61,8 @@ export default function App() {
   const [seawolf, setSeawolf] = useState<SeaWolfRunResult | undefined>();
   const [island, setIsland] = useState<IslandRunResult | undefined>();
   const [islandDecisions, setIslandDecisions] = useState<IslandDecision[]>([]);
+  const [classic, setClassic] = useState<ClassicRunResult | undefined>();
+  const [classicDecisions, setClassicDecisions] = useState<SflDecisionView[]>([]);
   const [stats, setStats] = useState<{ entries: HistoryEntry[]; source: Source; file?: string } | null>(null);
   const [savedTo, setSavedTo] = useState<Source | null>(null);
   const [analysis, setAnalysis] = useState<FullAnalysis | undefined>();
@@ -63,6 +75,7 @@ export default function App() {
 
   const rrScenario = useMemo(() => (config.seed && plan.includes('redrock') ? generateRedrock(config.seed, config.difficulty, config.lang) : null), [config, runId]);
   const swScenario = useMemo(() => (config.seed && plan.includes('seawolf') ? generateSeaWolf(config.seed, config.difficulty, config.lang) : null), [config, runId]);
+  const clScenario = useMemo(() => (config.seed && plan.includes('sfl-classic') ? generateClassic(config.seed, config.difficulty, config.lang) : null), [config, runId]);
   const islScenario = useMemo(() => (config.seed && plan.includes('sfl-island') ? generateIsland(config.seed, config.difficulty, config.lang) : null), [config, runId]);
 
   const inRun = screen === 'run';
@@ -88,6 +101,8 @@ export default function App() {
     setSeawolf(undefined);
     setIsland(undefined);
     setIslandDecisions([]);
+    setClassic(undefined);
+    setClassicDecisions([]);
     setSavedTo(null);
     setAnalysis(undefined);
     setLog(null);
@@ -111,10 +126,10 @@ export default function App() {
       go('interlude');
       return;
     }
-    void finishAll({ redrock, seawolf, island, ...got });
+    void finishAll({ redrock, seawolf, island, classic, ...got });
   };
 
-  const finishAll = async ({ redrock: rr, seawolf: sw, island: isl }: Collected) => {
+  const finishAll = async ({ redrock: rr, seawolf: sw, island: isl, classic: cl }: Collected) => {
     const { log: sessionLog, savedToFile } = await recorder.finish();
     const prev = (await loadHistory()).entries.filter((e) => e.mode === config.mode);
     const extra: ExtraGame[] = [];
@@ -126,6 +141,16 @@ export default function App() {
         times: islandTimes(isl.answers),
         ...islandContext(isl.scenario, islGrade),
         patterns: islandPatterns(isl.scenario, isl.answers, islGrade),
+      });
+    }
+    let clGrade: ReturnType<typeof gradeClassic> | null = null;
+    if (cl) {
+      clGrade = gradeClassic(cl.scenario, cl.answers);
+      extra.push({
+        rubric: clGrade.rubric,
+        times: classicTimes(cl.answers),
+        ...classicContext(cl.scenario, clGrade),
+        patterns: classicPatterns(cl.scenario, cl.answers, clGrade),
       });
     }
     const a = buildAnalysis({
@@ -185,7 +210,14 @@ export default function App() {
         detail.caseTypes[c.type] = cur;
       }
     }
-    if (rr?.timedOut || sw?.timedOut || isl?.timedOut) detail.timedOut = true;
+    if (cl && clGrade) {
+      const g = clGrade.rubric;
+      g.parts.forEach((p) => {
+        const sec = p.key === 'cl-ranking' ? (cl.answers.timeSec.briefing ?? 0) + (cl.answers.timeSec.ranking ?? 0) : Object.entries(cl.answers.timeSec).filter(([k]) => k.startsWith('d')).reduce((s, [, v]) => s + v, 0);
+        phases.push({ key: `sfl-c-${p.key}`, name: `SFL Classic · ${p.label}`, timeSec: sec, score: Math.round((p.earned / p.max) * 100), correct: p.earned, total: p.max });
+      });
+    }
+    if (rr?.timedOut || sw?.timedOut || isl?.timedOut || cl?.timedOut) detail.timedOut = true;
     const entry: HistoryEntry = {
       id: `${Date.now()}`,
       date: new Date().toISOString(),
@@ -204,6 +236,7 @@ export default function App() {
     };
     setAnalysis(a);
     setIslandDecisions(islGrade?.decisions ?? []);
+    setClassicDecisions(clGrade?.decisions ?? []);
     setLog(sessionLog);
     setSessionSaved(savedToFile);
     setPrevious(prev);
@@ -275,6 +308,21 @@ export default function App() {
         />
       )}
 
+      {screen === 'run' && current === 'sfl-classic' && clScenario && (
+        <ClassicRun
+          key={`cl-${runId}`}
+          scenario={clScenario}
+          durationSec={durationSec('sfl-classic')}
+          exam={config.exam}
+          label={plan.length > 1 ? `Parte ${step + 1}: SFL Classic` : undefined}
+          onFinish={(answers, timedOut) => {
+            const res = { scenario: clScenario, answers, timedOut };
+            setClassic(res);
+            next({ classic: res });
+          }}
+        />
+      )}
+
       {screen === 'interlude' && (
         <div className="interlude card">
           <div className="q-num">
@@ -301,7 +349,12 @@ export default function App() {
           log={log}
           sessionSaved={sessionSaved}
           previous={previous}
-          extraReview={island && islandDecisions.length > 0 ? <SflReview title="SFL Island" decisions={islandDecisions} days={island.scenario.days.length} /> : undefined}
+          extraReview={
+            <>
+              {island && islandDecisions.length > 0 && <SflReview title="SFL Island" decisions={islandDecisions} days={island.scenario.days.length} />}
+              {classic && classicDecisions.length > 0 && <SflReview title="SFL Classic" decisions={classicDecisions} days={1} />}
+            </>
+          }
           onHome={() => go('home')}
           onStats={openStats}
           onRepeat={() => start(config)}
