@@ -401,6 +401,29 @@ describe('SFL Classic', () => {
   });
 });
 
+describe('SFL Classic: la longitud no delata la mejor opción', () => {
+  it('la mejor no es casi siempre la más larga, ni la más corta, ni la intermedia', () => {
+    for (const lang of ['es', 'en'] as const) {
+      const n = { longest: 0, shortest: 0, middle: 0, total: 0 };
+      for (let i = 0; i < 80; i++)
+        for (const d of generateClassic(`cl${i}`, i % 2 ? 'hard' : 'normal', lang).decisions)
+          for (const v of Object.values(d.variants)) {
+            const best = v.options.find((o) => o.quality === 'best')!;
+            const others = v.options.filter((o) => o !== best);
+            const longest = others.every((o) => o.text.length < best.text.length);
+            const shortest = others.every((o) => o.text.length > best.text.length);
+            n.total++;
+            if (longest) n.longest++;
+            else if (shortest) n.shortest++;
+            else n.middle++;
+          }
+      expect(n.longest / n.total).toBeLessThan(0.45);
+      expect(n.shortest / n.total).toBeLessThan(0.45);
+      expect(n.middle / n.total).toBeLessThan(0.55);
+    }
+  });
+});
+
 describe('Nota global con varias pruebas', () => {
   it('cada prueba pesa lo mismo y los porcentajes perdidos siguen sumando 100 − nota', () => {
     const isl = generateIsland('mix', 'normal');
