@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   bestAssignments,
   beliefCore,
+  dayKeyQuestions,
+  effectiveWorkload,
   emptyIslandDay,
   generateIsland,
   IslandDayAnswer,
@@ -27,7 +29,7 @@ function perfectPlay(sc: IslandScenario): IslandDayAnswer[] {
   const ans: IslandDayAnswer[] = [];
   sc.days.forEach((day, d) => {
     const a = emptyIslandDay(sc, d);
-    a.asked = [...new Set(day.keyFacts.map((f) => f.question))];
+    a.asked = dayKeyQuestions(day);
     a.askedAt = a.asked.map(() => 40);
     a.assign = { ...day.optimum };
     for (const [rid, rs] of Object.entries(day.reasons)) a.reasons[rid] = rs[0];
@@ -60,7 +62,7 @@ describe('SFL Island: generador y validador', () => {
         expect(day.optimumValue - day.secondValue).toBeGreaterThanOrEqual(2);
         expect(sc.researchers.some((r) => day.optimum[r.id] !== day.baseline[r.id])).toBe(true);
         const keyQs = [...new Set(day.keyFacts.map((f) => f.question))];
-        expect(keyQs.length).toBeLessThanOrEqual(day.budget);
+        expect(dayKeyQuestions(day).length).toBeLessThanOrEqual(day.budget);
         // Con solo las preguntas clave se deduce el óptimo; sin preguntar, no
         expect(bestAssignments(beliefCore(sc, d, keyQs), sc.researchers, sc.stations)[0].a).toEqual(day.optimum);
         expect(bestAssignments(beliefCore(sc, d, []), sc.researchers, sc.stations)[0].a).not.toEqual(day.optimum);
@@ -91,6 +93,113 @@ describe('SFL Island: generador y validador', () => {
     const broken2: IslandScenario = JSON.parse(JSON.stringify(sc));
     broken2.days[1].support[0].options.forEach((o) => (o.quality = 'best'));
     expect(validateIsland(broken2).map((x) => x.code)).toContain('SUPPORT');
+  });
+});
+
+describe('SFL Island: perfiles, presupuesto justo y apoyo según lo explorado', () => {
+  it('cada investigador tiene una fortaleza distinta, una segunda habilidad y un punto débil', () => {
+    for (let i = 0; i < 20; i++) {
+      const sc = generateIsland(`pf${i}`, 'normal');
+      expect(new Set(sc.researchers.map((r) => r.skill1)).size).toBe(4);
+      for (const r of sc.researchers) {
+        expect(r.prof[r.skill1]).toBe(4);
+        expect(r.prof[r.skill2]).toBe(2);
+        expect(r.prof[r.weak]).toBe(0);
+      }
+    }
+  });
+
+  it('el presupuesto es justo: en Difícil no sobra ninguna pregunta y en Normal como mucho una', () => {
+    for (let i = 0; i < 40; i++)
+      for (const diff of ['normal', 'hard'] as const) {
+        const sc = generateIsland(`b${i}`, diff);
+        for (const day of sc.days) {
+          const k = dayKeyQuestions(day).length;
+          expect(k).toBeLessThanOrEqual(day.budget);
+          expect(k).toBeGreaterThanOrEqual(day.budget - (diff === 'hard' ? 0 : 1));
+          // Una pregunta por objetivo: las clave son de objetivos distintos
+          expect(new Set(dayKeyQuestions(day).map((q) => q.split(':')[0])).size).toBe(k);
+        }
+        // En los 3 días hay al menos un conflicto, una sobrecarga y datos contradictorios
+        const types = new Set(sc.days.flatMap((d) => d.support.map((r) => r.type)));
+        for (const ty of ['conflict', 'overload', 'contradiction']) expect(types.has(ty as never)).toBe(true);
+      }
+  });
+
+  it('cada día una petición de Apoyar depende de saber quién tiene margen, y solo una persona lo tiene', () => {
+    for (let i = 0; i < 30; i++) {
+      const sc = generateIsland(`ev${i}`, i % 2 ? 'hard' : 'normal', i % 3 ? 'es' : 'en');
+      sc.days.forEach((day, d) => {
+        const linked = day.support.filter((r) => r.evidence);
+        expect(linked).toHaveLength(1);
+        const ev = linked[0].evidence!;
+        expect(linked[0].options.find((o) => o.quality === 'best')!.who).toBe(ev.who);
+        expect(sc.researchers.filter((r) => effectiveWorkload(sc, d, r.id) === 'low').map((r) => r.id)).toEqual([ev.who]);
+        expect(day.answers[ev.question].facts).toContain(`workload:${ev.who}`);
+        // Sin la información, hay una opción aceptable que no carga a nadie
+        expect(linked[0].options.some((o) => o.quality === 'ok' && !o.who)).toBe(true);
+      });
+    }
+  });
+
+  it('la mejor respuesta no se delata por ser la más larga (ni la más corta)', () => {
+    for (const lang of ['es', 'en'] as const) {
+      let longest = 0;
+      let shortest = 0;
+      let total = 0;
+      for (let i = 0; i < 60; i++)
+        for (const day of generateIsland(`len${i}`, 'normal', lang).days)
+          for (const r of day.support) {
+            const best = r.options.find((o) => o.quality === 'best')!;
+            const others = r.options.filter((o) => o !== best);
+            total++;
+            if (others.every((o) => o.text.length < best.text.length)) longest++;
+            if (others.every((o) => o.text.length > best.text.length)) shortest++;
+          }
+      expect(longest / total).toBeLessThan(0.45);
+      expect(shortest / total).toBeLessThan(0.45);
+    }
+  });
+
+  it('el validador rechaza una petición enlazada cuya mejor respuesta no va a quien tiene margen', () => {
+    const sc = generateIsland('evbad', 'normal');
+    const broken: IslandScenario = JSON.parse(JSON.stringify(sc));
+    const req = broken.days[0].support.find((r) => r.evidence)!;
+    const best = req.options.find((o) => o.quality === 'best')!;
+    const busy = req.options.find((o) => o.who && o.quality !== 'best')!;
+    best.quality = 'poor';
+    busy.quality = 'best';
+    expect(validateIsland(broken).map((x) => x.code)).toContain('EVIDENCE');
+    // Y un día con preguntas de sobra en Difícil
+    const hard = generateIsland('evbad', 'hard');
+    const loose: IslandScenario = JSON.parse(JSON.stringify(hard));
+    loose.days[0].budget = 6;
+    expect(validateIsland(loose).map((x) => x.code)).toContain('SLACK');
+  });
+
+  it('pasar trabajo sin haber preguntado quién tenía margen se marca como intuición; la opción prudente vale parcial', () => {
+    const sc = generateIsland('guess', 'normal');
+    const ans = perfectPlay(sc);
+    const day = sc.days[0];
+    const req = day.support.find((r) => r.evidence)!;
+    ans[0].asked = ans[0].asked.filter((q) => q !== req.evidence!.question);
+    // Apuesta: a la persona sin margen
+    ans[0].support[req.id] = req.options.findIndex((o) => o.who && o.quality !== 'best');
+    let g = gradeIsland(sc, ans);
+    let item = g.rubric.parts.flatMap((p) => p.items).find((i) => i.id === `isl0-support-${req.id}`)!;
+    expect(item.earned).toBe(0);
+    expect(item.errorType).toBe('sfl-support-guess');
+    expect(islandPatterns(sc, ans, g).map((p) => p.id)).toContain('sfl-intuition');
+    const dec = g.decisions.find((x) => x.id === `isl0-support-${req.id}`)!;
+    expect(dec.when).toMatch(/Explorar/);
+    // Prudente: la aceptable, sin nombre
+    ans[0].support[req.id] = req.options.findIndex((o) => o.quality === 'ok' && !o.who);
+    g = gradeIsland(sc, ans);
+    item = g.rubric.parts.flatMap((p) => p.items).find((i) => i.id === `isl0-support-${req.id}`)!;
+    expect(item.earned).toBe(3);
+    expect(item.errorType).toBe('sfl-support-ok');
+    // Y la pregunta clave que faltó cuesta puntos de Explorar
+    expect(g.rubric.parts.flatMap((p) => p.items).find((i) => i.id === `isl0-key-${req.evidence!.question}`)!.earned).toBe(0);
   });
 });
 
@@ -175,7 +284,7 @@ describe('SFL Island: corrección', () => {
     const sc = generateIsland('w1', 'normal');
     const ans = perfectPlay(sc);
     const day = sc.days[0];
-    const keyQs = new Set(day.keyFacts.map((f) => f.question));
+    const keyQs = new Set(dayKeyQuestions(day));
     const keyTargets = new Set([...keyQs].map((q) => q.split(':')[0]));
     // Gastar todas las preguntas en objetivos sin datos clave, pronto, y asignar sin cambiar nada
     ans[0].asked = day.questions.filter((q) => !keyTargets.has(q.target) && q.kind !== 'contrib').map((q) => q.id).slice(0, day.budget);

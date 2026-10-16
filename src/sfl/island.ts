@@ -19,6 +19,8 @@ export const ISLAND_CONFIG = {
   questionsPerDay: [3, 3, 2],
   notesPersistOvernight: false,
   supportPerDay: 4,
+  /** Preguntas que pueden sobrar cada día sin perder información clave (0 = presupuesto justo). */
+  slack: { normal: 1, hard: 0 } as Record<Difficulty, number>,
 };
 
 export interface Researcher {
@@ -27,7 +29,9 @@ export interface Researcher {
   title: string;
   skill1: Skill;
   skill2: Skill;
-  /** Dominio oculto de cada habilidad: 4 la principal (visible), 2 la secundaria, 1 y 0 el resto. */
+  /** Punto débil: la habilidad sin experiencia (nivel 0). */
+  weak: Skill;
+  /** Dominio de cada habilidad (visible en el perfil): 4 la principal, 2 la secundaria, 1 y 0 el resto. */
   prof: Record<Skill, number>;
 }
 
@@ -54,16 +58,22 @@ export interface SupportOption {
   text: string;
   quality: 'best' | 'ok' | 'poor';
   why: string;
+  /** Investigador al que la opción pasa trabajo (solo en peticiones que dependen de lo explorado). */
+  who?: string;
 }
+
+export type SupportType = 'conflict' | 'overload' | 'contradiction' | 'dependency' | 'wellbeing' | 'delegate' | 'capacity';
 
 export interface SupportRequest {
   id: string;
   from: string;
-  type: 'conflict' | 'overload' | 'contradiction' | 'dependency' | 'wellbeing' | 'delegate';
+  type: SupportType;
   urgent: boolean;
   title: string;
   text: string;
   options: SupportOption[];
+  /** Si la mejor respuesta depende de algo que había que preguntar en Explorar ese día. */
+  evidence?: { question: string; who: string; explanation: string };
 }
 
 export interface DayPlan {
@@ -255,6 +265,7 @@ function tryGenerate(rng: Rng, seed: string, difficulty: Difficulty, lang: Lang)
       title: TITLES[lang][skill1],
       skill1,
       skill2,
+      weak: s4,
       prof,
     };
   });
@@ -386,6 +397,18 @@ function tryGenerate(rng: Rng, seed: string, difficulty: Difficulty, lang: Lang)
         const stationChanged = need[optimum[r.id]] !== stations.find((s) => s.id === optimum[r.id])!.usual;
         reasons[r.id] = own ? ['personal'] : stationChanged ? ['station', 'skills'] : ['cover', 'skills'];
       });
+      // Una petición de Apoyar al día depende de saber quién tiene margen: solo una persona tiene la carga baja
+      // y solo se sabe preguntándole por su estado. No puede ser a quien ya hay que preguntar por la asignación.
+      const keyTargets = new Set(facts.filter((f) => keyFacts.includes(f)).map((f) => f.question.split(':')[0]));
+      const spare = researchers.filter((r) => !overloaded[r.id] && !keyTargets.has(r.id));
+      if (!spare.length) continue dayTry;
+      const low = rng.pick(spare);
+      researchers.forEach((r) => {
+        if (!overloaded[r.id]) workload[r.id] = r.id === low.id ? 'low' : rng.pick(['mid', 'mid', 'high'] as Level[]);
+      });
+      const support = makeSupport(rng, lang, researchers, stations, d, low.id);
+      const nKeys = keyTargets.size + 1;
+      if (nKeys > ISLAND_CONFIG.questionsPerDay[d] || nKeys < ISLAND_CONFIG.questionsPerDay[d] - ISLAND_CONFIG.slack[difficulty]) continue dayTry;
       // Preguntas y respuestas
       const questions: Question[] = [];
       const answers: Record<string, Answer> = {};
@@ -499,7 +522,7 @@ function tryGenerate(rng: Rng, seed: string, difficulty: Difficulty, lang: Lang)
         optimumValue,
         secondValue,
         reasons,
-        support: makeSupport(rng, lang, researchers, stations, d),
+        support,
         reflectDimension: d === 1 ? 'workload' : 'mood',
       });
       break;
@@ -523,157 +546,252 @@ function tryGenerate(rng: Rng, seed: string, difficulty: Difficulty, lang: Lang)
 
 // ---------------------------------------------------------------- peticiones de apoyo
 
-function makeSupport(rng: Rng, lang: Lang, researchers: Researcher[], stations: Station[], d: number): SupportRequest[] {
+type Opt = { es: string; en: string; q: SupportOption['quality']; why: string; who?: string };
+type Variant = { title: [string, string]; text: [string, string]; options: Opt[] };
+
+const o = (es: string, en: string, q: SupportOption['quality'], why: string, who?: string): Opt => ({ es, en, q, why, who });
+
+/** Variantes de cada situación. Las opciones tienen longitudes parecidas: la mejor no se delata por ser la más larga. */
+function variants(type: SupportType, from: Researcher, other: Researcher, st: Station, low: Researcher, busy: Researcher, lang: Lang): Variant[] {
+  const S = la(STATIONS.es[st.usual]);
+  const E = `the ${STATIONS.en[st.usual]}`;
+  void lang;
+  switch (type) {
+    case 'conflict':
+      return [
+        {
+          title: [`Desacuerdo con ${other.name}`, `Disagreement with ${other.name}`],
+          text: [
+            `${from.name}: «${other.name} y yo no nos ponemos de acuerdo sobre el método de muestreo y llevamos toda la mañana discutiendo. ¿Qué hacemos?»`,
+            `${from.name}: "${other.name} and I can't agree on the sampling method and we've been arguing all morning. What should we do?"`,
+          ],
+          options: [
+            o('Reunirlos un cuarto de hora, que cada uno defienda su método con datos y acordar un criterio.', 'Meet them for 15 minutes, have each defend their method with data, and agree a criterion.', 'best', 'Escucha a las dos partes y resuelve con un criterio basado en datos.'),
+            o('Elegir tú el método que te parezca más sólido y explicarles a los dos por qué lo has decidido así.', 'Pick the method that seems soundest to you and explain to both of them why you decided that way.', 'ok', 'Desbloquea rápido y razona la decisión, pero sin escuchar a las partes: puede dejar resentimiento.'),
+            o('Que lo resuelvan entre ellos.', 'Let them sort it out between themselves.', 'poor', 'Evita el conflicto: lo más probable es que siga creciendo.'),
+          ],
+        },
+        {
+          title: [`Un resultado compartido`, `A shared result`],
+          text: [
+            `${from.name}: «${other.name} ha presentado al coordinador un resultado que hicimos juntos como si fuera solo suyo. Me ha sentado mal.»`,
+            `${from.name}: "${other.name} presented a result we did together to the coordinator as if it were theirs alone. I'm upset."`,
+          ],
+          options: [
+            o('Hablar con los dos a la vez, aclarar qué hizo cada uno y acordar cómo firmar lo compartido.', 'Talk to both together, clarify who did what and agree how to credit shared work.', 'best', 'Aborda el conflicto con las dos partes y deja una regla para la próxima vez.'),
+            o(`Hablar en privado con ${other.name} para que reconozca la parte de ${from.name}.`, `Talk privately to ${other.name} so they acknowledge ${from.name}'s part.`, 'ok', 'Corrige el agravio, pero sin escuchar a las dos partes juntas ni acordar cómo evitarlo.'),
+            o('Restarle importancia: lo que cuenta es el resultado del equipo, no quién lo firma.', "Play it down: what matters is the team's result, not whose name is on it.", 'poor', 'Invalida la queja y deja el conflicto abierto.'),
+          ],
+        },
+      ];
+    case 'contradiction':
+      return [
+        {
+          title: ['Datos que no cuadran', "Data that doesn't add up"],
+          text: [
+            `${from.name}: «Según ${other.name}, ${S} ya terminó su tarea, pero el registro de la estación dice que va por la mitad. ¿Con qué me quedo?»`,
+            `${from.name}: "According to ${other.name}, ${E} has already finished its task, but the station's log says it's only halfway. Which do I trust?"`,
+          ],
+          options: [
+            o(`Comprobarlo con ${S} antes de planificar nada.`, `Check with ${E} before planning anything.`, 'best', 'Ante información contradictoria, verifica en la fuente primaria antes de decidir.'),
+            o('Fiarse del registro escrito, que suele estar al día, y planificar con lo que dice.', 'Trust the written log, which is usually up to date, and plan with what it says.', 'ok', 'El registro es más fiable que un comentario, pero no se verifica.'),
+            o(`Fiarse de ${other.name}, que estuvo allí ayer, y seguir con el plan previsto.`, `Trust ${other.name}, who was there yesterday, and carry on with the plan.`, 'poor', 'Decide con la fuente menos fiable y sin comprobar.'),
+          ],
+        },
+        {
+          title: ['Dos sensores, dos cifras', 'Two sensors, two readings'],
+          text: [
+            `${from.name}: «Los dos sensores de ${S} dan temperaturas que difieren 4 grados. ¿Cuál uso para el informe?»`,
+            `${from.name}: "The two sensors at ${E} give temperatures 4 degrees apart. Which one do I use for the report?"`,
+          ],
+          options: [
+            o('Revisar la calibración de los dos y, mientras, dar el rango en lugar de una cifra.', 'Check both calibrations and, meanwhile, report the range instead of one number.', 'best', 'Busca la causa de la discrepancia y no oculta la incertidumbre mientras tanto.'),
+            o('Usar la media de los dos y anotar la discrepancia al pie del informe.', 'Use the average of the two and note the discrepancy in a footnote.', 'ok', 'Es transparente, pero promedia sin saber cuál de los dos falla.'),
+            o('Usar el sensor cuyo valor encaja mejor con lo que esperábamos encontrar.', 'Use the sensor whose value best fits what we expected to find.', 'poor', 'Elige el dato por la hipótesis, no por su fiabilidad.'),
+          ],
+        },
+      ];
+    case 'dependency':
+      return [
+        {
+          title: ['Esperando resultados', 'Waiting for results'],
+          text: [
+            `${from.name}: «No puedo avanzar hasta que ${S} me pase sus resultados, y nadie sabe cuándo estarán.»`,
+            `${from.name}: "I can't move forward until ${E} sends me their results, and nobody knows when they'll be ready."`,
+          ],
+          options: [
+            o(`Pedir a ${S} una fecha concreta y, mientras, darle otra tarea.`, `Ask ${E} for a firm date and meanwhile give them another task.`, 'best', 'Aclara la dependencia y evita el tiempo muerto.'),
+            o(`Pedir a ${S} que pase esos resultados por delante de lo que esté haciendo.`, `Ask ${E} to put those results ahead of whatever they're doing now.`, 'ok', 'Presiona a otro equipo sin conocer sus prioridades y no evita el tiempo muerto.'),
+            o('Que espere: ya llegarán.', "Tell them to wait: they'll come.", 'poor', 'Acepta el tiempo muerto sin hacer nada.'),
+          ],
+        },
+        {
+          title: ['Falta una pieza', 'A missing part'],
+          text: [
+            `${from.name}: «Para calibrar el equipo de ${S} necesito una pieza que llega en el barco del jueves.»`,
+            `${from.name}: "To calibrate the equipment at ${E} I need a part that arrives on Thursday's boat."`,
+          ],
+          options: [
+            o('Calibrar hoy a mano, aunque sea más lento, y afinar el jueves con la pieza.', "Calibrate by hand today, even if slower, and fine-tune on Thursday with the part.", 'best', 'Mantiene el trabajo en marcha con una solución provisional y un plan para completarla.'),
+            o('Pasar esa calibración al jueves y adelantar otras tareas de la estación.', 'Move that calibration to Thursday and bring other station tasks forward.', 'ok', 'Evita el tiempo muerto, pero retrasa los datos de la estación tres días.'),
+            o('Saltarse la calibración y usar los datos tal como salen.', 'Skip the calibration and use the data as it comes.', 'poor', 'Sacrifica la calidad de los datos para no esperar.'),
+          ],
+        },
+      ];
+    case 'wellbeing':
+      return [
+        {
+          title: ['No me encuentro bien', "I'm not feeling great"],
+          text: [
+            `${from.name}: «Llevo unos días durmiendo mal y me cuesta concentrarme.»`,
+            `${from.name}: "I've been sleeping badly for a few days and I find it hard to concentrate."`,
+          ],
+          options: [
+            o('Hablarlo en privado, aligerar su tarea de hoy y volver a hablarlo mañana.', "Talk in private, lighten today's task and check in again tomorrow.", 'best', 'Atiende el bienestar con un ajuste concreto y seguimiento.'),
+            o('Darle el resto del día libre para que descanse y vuelva mañana con energía.', 'Give them the rest of the day off to rest and come back tomorrow with energy.', 'ok', 'Bienintencionado, pero sin hablar de la causa ni planificar el seguimiento.'),
+            o('Pedirle que aguante hasta el final de la misión.', 'Ask them to hang on until the end of the mission.', 'poor', 'Ignora el problema de bienestar.'),
+          ],
+        },
+        {
+          title: ['Me siento al margen', 'I feel left out'],
+          text: [
+            `${from.name}: «En las reuniones nadie me pregunta y siento que mi trabajo no cuenta.»`,
+            `${from.name}: "Nobody asks me anything in meetings and I feel my work doesn't count."`,
+          ],
+          options: [
+            o('Pedirle que presente sus avances en la reunión de mañana.', 'Ask them to present their progress at tomorrow’s meeting.', 'best', 'Le da visibilidad real con una acción concreta.'),
+            o('Decirle que su trabajo es muy valioso para el equipo y que no se preocupe por eso.', 'Tell them their work is very valuable to the team and not to worry about it.', 'ok', 'Reconforta, pero no cambia nada de lo que causa el malestar.'),
+            o('Explicarle que en las reuniones habla quien tiene algo urgente.', 'Explain that in meetings whoever has something urgent does the talking.', 'poor', 'Justifica la situación e ignora la preocupación.'),
+          ],
+        },
+      ];
+    case 'delegate':
+      return [
+        {
+          title: ['¿Decido yo?', 'Should I decide?'],
+          text: [
+            `${from.name}: «Hay que elegir proveedor para las piezas de ${S}. ¿Lo decido yo o lo decides tú?»`,
+            `${from.name}: "We need to choose a supplier for the parts at ${E}. Should I decide, or will you?"`,
+          ],
+          options: [
+            o(`Que lo decida ${from.name}, con un presupuesto máximo, y te informe.`, `Let ${from.name} decide within a maximum budget and report back.`, 'best', 'Delega en quien tiene el conocimiento, con límites claros.'),
+            o('Pedirle tres opciones comparadas por precio y plazo y decidir tú.', 'Ask for three options compared on price and lead time, and decide yourself.', 'ok', 'Funciona, pero retrasa la decisión y no aprovecha su conocimiento.'),
+            o('Elegir tú el proveedor más barato, sin consultar a nadie.', 'Pick the cheapest supplier yourself, without asking anyone.', 'poor', 'Decide sin información ni consultar a quien sabe.'),
+          ],
+        },
+        {
+          title: ['Presentación al consejo', 'Presentation to the council'],
+          text: [
+            `${from.name}: «El consejo de la isla quiere ver los avances el viernes. ¿Preparo yo la presentación?»`,
+            `${from.name}: "The island council wants to see progress on Friday. Shall I prepare the presentation?"`,
+          ],
+          options: [
+            o('Sí, que la prepare y repasarla juntos el jueves.', 'Yes, let them prepare it and review it together on Thursday.', 'best', 'Delega con un punto de control antes de la entrega.'),
+            o(`Prepararla tú, que conoces mejor al consejo, y pedirle a ${from.name} los datos.`, `Prepare it yourself, as you know the council better, and ask ${from.name} for the data.`, 'ok', 'Asegura el resultado, pero desaprovecha la oferta y te carga a ti.'),
+            o('Pedir al consejo que la aplace hasta que acabe la misión.', 'Ask the council to postpone it until the mission ends.', 'poor', 'Esquiva un compromiso con un stakeholder sin motivo.'),
+          ],
+        },
+      ];
+    case 'overload':
+      return [
+        {
+          title: ['Demasiado trabajo', 'Too much work'],
+          text: [
+            `${from.name}: «Tengo tres informes pendientes y no llego. ¿Me ayudas a priorizar?»`,
+            `${from.name}: "I have three reports due and I won't make it. Can you help me prioritise?"`,
+          ],
+          options: [
+            o(`Ordenar juntos los informes por plazo y pasar el menos urgente a ${low.name}.`, `Rank the reports by deadline together and hand the least urgent to ${low.name}.`, 'best', `Prioriza y pasa trabajo a ${low.name}, que era quien tenía margen.`, low.id),
+            o(`Ordenar juntos los informes por plazo y pasar el menos urgente a ${busy.name}.`, `Rank the reports by deadline together and hand the least urgent to ${busy.name}.`, 'poor', `Prioriza bien, pero ${busy.name} no tenía margen: le pasas trabajo que no puede asumir.`, busy.id),
+            o('Ampliar un día el plazo del informe menos urgente.', 'Extend the deadline of the least urgent report by a day.', 'ok', 'Sin saber quién tenía margen, es lo prudente: alivia sin cargar a nadie, pero no aprovecha la capacidad libre del equipo.'),
+            o('Que haga lo que pueda y se quede más horas.', 'Tell them to do what they can and stay late.', 'poor', 'Ignora la sobrecarga y empeora el bienestar.'),
+          ],
+        },
+        {
+          title: ['No llego a todo', "I can't do it all"],
+          text: [
+            `${from.name}: «Me han pedido repetir las mediciones de ayer y además tengo todo lo de hoy. No llego.»`,
+            `${from.name}: "I've been asked to redo yesterday's measurements on top of everything for today. I can't make it."`,
+          ],
+          options: [
+            o(`Mantener lo de hoy y que ${low.name} repita las mediciones.`, `Keep today's work and have ${low.name} redo the measurements.`, 'best', `Pasa la tarea extra a ${low.name}, que era quien tenía margen.`, low.id),
+            o(`Mantener lo de hoy y que ${busy.name} repita las mediciones.`, `Keep today's work and have ${busy.name} redo the measurements.`, 'poor', `${busy.name} no tenía margen: le pasas trabajo que no puede asumir.`, busy.id),
+            o('Retrasar un día la repetición y avisar a quien la pidió.', 'Delay the re-run by a day and tell whoever asked for it.', 'ok', 'Sin saber quién tenía margen, es lo prudente, pero retrasa un trabajo que otro miembro del equipo podía hacer hoy.'),
+            o('Pedirle que haga las dos cosas hoy, aunque salga tarde.', 'Ask them to do both today, even if they finish late.', 'poor', 'Ignora la sobrecarga y empeora el bienestar.'),
+          ],
+        },
+      ];
+    case 'capacity':
+      return [
+        {
+          title: ['Visita del consejo', 'Council visit'],
+          text: [
+            `${from.name}: «Esta tarde llega una visita del consejo y alguien tiene que acompañarla tres horas. ¿Quién va?»`,
+            `${from.name}: "A council delegation arrives this afternoon and someone has to accompany them for three hours. Who goes?"`,
+          ],
+          options: [
+            o(`Que vaya ${low.name} y siga mañana con lo suyo.`, `Send ${low.name}, who picks up their own work tomorrow.`, 'best', `${low.name} era quien tenía margen: la visita no retrasa nada importante.`, low.id),
+            o(`Que vaya ${busy.name} y siga mañana con lo suyo.`, `Send ${busy.name}, who picks up their own work tomorrow.`, 'poor', `${busy.name} no tenía margen: la visita retrasa su trabajo.`, busy.id),
+            o('Ir tú y que el equipo siga con su plan.', 'Go yourself and let the team stick to its plan.', 'ok', 'No carga a nadie, pero te quita tres horas de coordinación; con la información, podías enviar a quien tenía margen.'),
+            o(`Que vaya ${from.name}, que es quien ha avisado.`, `Send ${from.name}, since they raised it.`, 'poor', 'Elige por quién avisa, no por quién tiene margen.'),
+          ],
+        },
+        {
+          title: ['Inventario urgente', 'Urgent inventory'],
+          text: [
+            `${from.name}: «Hay que revisar a fondo el inventario de ${S} antes del viernes. ¿A quién se lo encargo?»`,
+            `${from.name}: "Someone has to do a full inventory check at ${E} before Friday. Who should I give it to?"`,
+          ],
+          options: [
+            o(`Encargárselo a ${low.name} esta misma tarde.`, `Give it to ${low.name} this afternoon.`, 'best', `${low.name} era quien tenía margen para asumirlo.`, low.id),
+            o(`Encargárselo a ${busy.name} esta misma tarde.`, `Give it to ${busy.name} this afternoon.`, 'poor', `${busy.name} no tenía margen: le cargas más trabajo.`, busy.id),
+            o('Dejarlo para el jueves, cuando haya menos trabajo.', 'Leave it for Thursday, when there is less work.', 'ok', 'Sin saber quién tenía margen, es razonable, pero lo deja para el final y sin margen de error.'),
+            o('Repartirlo entre los cuatro, un trozo a cada uno.', 'Split it among all four, a piece each.', 'poor', 'Trocea sin criterio y carga también a quien no tiene margen.'),
+          ],
+        },
+      ];
+  }
+}
+
+/** Situaciones que no dependen de lo explorado; cada día salen 3 de ellas más una que sí depende. */
+const FREE_TYPES: SupportType[] = ['conflict', 'contradiction', 'dependency', 'wellbeing', 'delegate'];
+const LINKED_TYPES: SupportType[] = ['overload', 'capacity'];
+
+function makeSupport(rng: Rng, lang: Lang, researchers: Researcher[], stations: Station[], d: number, lowId: string): SupportRequest[] {
   const t = T(lang);
-  const all: SupportRequest['type'][] = ['conflict', 'overload', 'contradiction', 'dependency', 'wellbeing', 'delegate'];
-  const types = rng.shuffle(all).slice(0, ISLAND_CONFIG.supportPerDay);
+  const low = researchers.find((r) => r.id === lowId)!;
+  const linked = rng.pick(LINKED_TYPES);
+  const types = [linked, ...rng.shuffle(FREE_TYPES).slice(0, ISLAND_CONFIG.supportPerDay - 1)];
+  // Cada investigador plantea una petición; la que depende de quién tiene margen no la plantea esa persona
+  const linkedFrom = rng.pick(researchers.filter((r) => r.id !== lowId));
+  const order = [linkedFrom, ...rng.shuffle(researchers.filter((r) => r.id !== linkedFrom.id))];
   const urgentIdx = rng.int(0, types.length - 1);
-  return types.map((type, i) => {
-    const from = researchers[i % researchers.length];
-    const other = researchers[(i + 1) % researchers.length];
+  const reqs = types.map((type, i): SupportRequest => {
+    const from = order[i];
+    const other = rng.pick(researchers.filter((r) => r.id !== from.id));
     const st = rng.pick(stations);
-    const mk = (title: string, text: string, best: [string, string], ok: [string, string], poor: [string, string]): SupportRequest => ({
+    const busy = rng.pick(researchers.filter((r) => r.id !== lowId && r.id !== from.id));
+    const v = rng.pick(variants(type, from, other, st, low, busy, lang));
+    return {
       id: `d${d}-q${i}`,
       from: from.id,
       type,
       urgent: i === urgentIdx,
-      title,
-      text,
-      options: rng.shuffle([
-        { text: best[0], quality: 'best' as const, why: best[1] },
-        { text: ok[0], quality: 'ok' as const, why: ok[1] },
-        { text: poor[0], quality: 'poor' as const, why: poor[1] },
-      ]),
-    });
-    switch (type) {
-      case 'conflict':
-        return mk(
-          t(`Desacuerdo con ${other.name}`, `Disagreement with ${other.name}`),
-          t(
-            `${from.name}: «${other.name} y yo no nos ponemos de acuerdo sobre el método de muestreo y llevamos toda la mañana discutiendo. ¿Qué hacemos?»`,
-            `${from.name}: "${other.name} and I can't agree on the sampling method and we've been arguing all morning. What should we do?"`,
-          ),
-          [
-            t(
-              'Reunirlos 15 minutos, que cada uno exponga su método con datos y acordar un criterio común antes de seguir.',
-              'Bring them together for 15 minutes, have each present their method with data, and agree a shared criterion before continuing.',
-            ),
-            'Aborda el conflicto directamente, escucha a las dos partes y lo resuelve con un criterio basado en datos.',
-          ],
-          [
-            t(
-              `Decidir tú el método para no perder más tiempo y explicárselo a ambos.`,
-              'Decide the method yourself so no more time is lost, and explain it to both.',
-            ),
-            'Resuelve rápido, pero sin escuchar a las partes: puede dejar resentimiento.',
-          ],
-          [
-            t('Pedirles que lo resuelvan entre ellos y que no te molesten con eso.', 'Ask them to sort it out between themselves and not bother you with it.'),
-            'Evita el conflicto: lo más probable es que siga creciendo.',
-          ],
-        );
-      case 'overload':
-        return mk(
-          t('Demasiado trabajo', 'Too much work'),
-          t(
-            `${from.name}: «Tengo tres informes pendientes y no llego. ¿Puedes ayudarme a priorizar?»`,
-            `${from.name}: "I have three reports due and I won't make it. Can you help me prioritise?"`,
-          ),
-          [
-            t(
-              'Revisar juntos los tres informes, ordenar por impacto y plazo, y pasar uno a alguien con menos carga.',
-              'Go through the three reports together, rank them by impact and deadline, and hand one to someone with less load.',
-            ),
-            'Ayuda a priorizar con criterios claros y reparte la carga de forma realista.',
-          ],
-          [
-            t('Ampliar el plazo de todos los informes un día.', 'Extend the deadline of all reports by one day.'),
-            'Alivia la presión, pero no prioriza ni redistribuye nada.',
-          ],
-          [
-            t('Decirle que haga lo que pueda y quedarse más horas.', 'Tell them to do what they can and stay late.'),
-            'Ignora la sobrecarga y empeora el bienestar.',
-          ],
-        );
-      case 'contradiction':
-        return mk(
-          t('Datos que no cuadran', "Data that doesn't add up"),
-          t(
-            `${from.name}: «Según ${other.name}, ${la(st.name)} ya terminó su tarea, pero el registro de la estación dice que va por la mitad. ¿Con qué me quedo?»`,
-            `${from.name}: "According to ${other.name}, the ${st.name} has already finished its task, but the station's log says it's only halfway. Which do I trust?"`,
-          ),
-          [
-            t(`Comprobarlo directamente con ${la(st.name)} antes de planificar nada.`, `Check directly with the ${st.name} before planning anything.`),
-            'Ante información contradictoria, verifica en la fuente primaria antes de decidir.',
-          ],
-          [
-            t('Fiarse del registro escrito y seguir adelante.', 'Trust the written log and move on.'),
-            'El registro es más fiable que un comentario, pero no se verifica.',
-          ],
-          [t(`Fiarse de lo que dice ${other.name}.`, `Trust what ${other.name} says.`), 'Decide con la fuente menos fiable y sin comprobar.'],
-        );
-      case 'dependency':
-        return mk(
-          t('Esperando resultados', 'Waiting for results'),
-          t(
-            `${from.name}: «No puedo avanzar hasta que ${la(st.name)} me pase sus resultados, y nadie sabe cuándo estarán.»`,
-            `${from.name}: "I can't move forward until the ${st.name} sends me their results, and nobody knows when they'll be ready."`,
-          ),
-          [
-            t(
-              `Preguntar a ${la(st.name)} un plazo concreto y, mientras, darle a ${from.name} una tarea que no dependa de esos resultados.`,
-              `Ask the ${st.name} for a concrete deadline and meanwhile give ${from.name} a task that doesn't depend on those results.`,
-            ),
-            'Aclara la dependencia y evita el tiempo muerto.',
-          ],
-          [t(`Pedir a ${la(st.name)} que se dé prisa.`, `Ask the ${st.name} to hurry up.`), 'Presiona, pero no resuelve el tiempo muerto ni fija un plazo.'],
-          [t('Que espere: ya llegarán.', "Tell them to wait: they'll arrive."), 'Acepta el tiempo muerto sin hacer nada.'],
-        );
-      case 'wellbeing':
-        return mk(
-          t('No me encuentro bien', "I'm not feeling great"),
-          t(
-            `${from.name}: «Llevo unos días durmiendo mal y me cuesta concentrarme.»`,
-            `${from.name}: "I've been sleeping badly for a few days and I find it hard to concentrate."`,
-          ),
-          [
-            t(
-              'Hablar en privado, ajustar su carga de hoy y acordar cuándo volver a hablarlo.',
-              'Talk in private, adjust their workload today and agree when to check in again.',
-            ),
-            'Atiende el bienestar con un ajuste concreto y seguimiento.',
-          ],
-          [
-            t('Darle el resto del día libre.', 'Give them the rest of the day off.'),
-            'Bienintencionado, pero sin hablar de la causa ni planificar el seguimiento.',
-          ],
-          [t('Pedirle que lo deje para después de la misión.', 'Ask them to leave it until after the mission.'), 'Ignora el problema de bienestar.'],
-        );
-      default:
-        return mk(
-          t('¿Decido yo?', 'Should I decide?'),
-          t(
-            `${from.name}: «Hay que elegir proveedor para las piezas de ${la(st.name)}. ¿Lo decido yo o lo decides tú?»`,
-            `${from.name}: "We need to choose a supplier for the ${st.name} parts. Should I decide, or will you?"`,
-          ),
-          [
-            t(
-              `Que lo decida ${from.name}, que conoce el tema, con un presupuesto máximo claro y que te informe.`,
-              `Let ${from.name}, who knows the topic, decide within a clear maximum budget and report back.`,
-            ),
-            'Delega en quien tiene el conocimiento, con límites claros.',
-          ],
-          [
-            t('Pedirle tres opciones y decidir tú.', 'Ask for three options and decide yourself.'),
-            'Funciona, pero retrasa la decisión y no aprovecha su conocimiento.',
-          ],
-          [
-            t('Elegir el proveedor más barato sin consultar.', 'Pick the cheapest supplier without asking.'),
-            'Decide sin información ni consultar a quien sabe.',
-          ],
-        );
-    }
+      title: t(...v.title),
+      text: t(...v.text),
+      options: rng.shuffle(v.options).map((x) => ({ text: t(x.es, x.en), quality: x.q, why: x.why, ...(x.who ? { who: x.who } : {}) })),
+      ...(LINKED_TYPES.includes(type)
+        ? { evidence: { question: `${lowId}:state`, who: lowId, explanation: `${low.name} tenía margen para más trabajo (y el resto, no)` } }
+        : {}),
+    };
   });
+  // Se muestran en un orden que no delata cuál es la enlazada
+  return rng.shuffle(reqs).map((r, i) => ({ ...r, id: `d${d}-q${i}` }));
+}
+
+/** Preguntas clave del día: las que cambian la asignación óptima y la que decide la petición de Apoyar enlazada. */
+export function dayKeyQuestions(day: Pick<DayPlan, 'keyFacts' | 'support'>): string[] {
+  return [...new Set([...day.keyFacts.map((f) => f.question), ...day.support.flatMap((r) => (r.evidence ? [r.evidence.question] : []))])];
 }
 
 // ---------------------------------------------------------------- lo que sabe el jugador
@@ -719,11 +837,15 @@ export function validateIsland(sc: IslandScenario): IslandIssue[] {
     if (sc.researchers.every((r) => d.optimum[r.id] === d.baseline[r.id]))
       add('BASELINE', `Día ${d.day}: la asignación óptima es la que sugieren los cargos visibles (no hace falta explorar).`);
     if (!d.keyFacts.length) add('KEYS', `Día ${d.day}: ningún dato oculto cambia la asignación.`);
-    // Los datos clave deben poder conseguirse dentro del presupuesto (una pregunta por objetivo y día)
+    // Los datos clave (asignación y petición enlazada) deben caber en el presupuesto, una pregunta por objetivo y día,
+    // y dejar como mucho `slack` preguntas libres: malgastar preguntas tiene que costar información.
     const keyQuestions = new Set(d.keyFacts.map((f) => f.question));
-    const targets = new Set([...keyQuestions].map((q) => q.split(':')[0]));
-    if (keyQuestions.size > d.budget) add('BUDGET', `Día ${d.day}: hacen falta ${keyQuestions.size} preguntas clave y solo hay ${d.budget}.`);
-    if (targets.size !== keyQuestions.size) add('BUDGET', `Día ${d.day}: dos datos clave requieren preguntar dos veces a la misma persona o estación.`);
+    const allKeys = dayKeyQuestions(d);
+    const targets = new Set(allKeys.map((q) => q.split(':')[0]));
+    if (allKeys.length > d.budget) add('BUDGET', `Día ${d.day}: hacen falta ${allKeys.length} preguntas clave y solo hay ${d.budget}.`);
+    if (targets.size !== allKeys.length) add('BUDGET', `Día ${d.day}: dos datos clave requieren preguntar dos veces a la misma persona o estación.`);
+    if (allKeys.length < d.budget - ISLAND_CONFIG.slack[sc.difficulty])
+      add('SLACK', `Día ${d.day}: sobran demasiadas preguntas (${d.budget - allKeys.length}); malgastarlas no costaría nada.`);
     for (const f of d.keyFacts)
       if (!d.answers[f.question]?.facts.includes(f.fact)) add('ANSWER', `Día ${d.day}: la pregunta ${f.question} no revela ${f.fact}.`);
     // Con solo las preguntas clave se llega a la asignación óptima (la información cabe en el presupuesto y basta)
@@ -740,7 +862,25 @@ export function validateIsland(sc: IslandScenario): IslandIssue[] {
       if (new Set(req.options.map((o) => o.text)).size !== req.options.length) add('SUPPORT', `${req.id}: hay opciones repetidas.`);
     }
     if (d.support.filter((r) => r.urgent).length !== 1) add('SUPPORT', `Día ${d.day}: debe haber exactamente una petición urgente.`);
+    // Petición enlazada: su mejor respuesta solo se justifica con lo explorado (quién tiene margen)
+    const linked = d.support.filter((r) => r.evidence);
+    if (linked.length !== 1) add('EVIDENCE', `Día ${d.day}: debe haber exactamente una petición que dependa de lo explorado.`);
+    for (const req of linked) {
+      const ev = req.evidence!;
+      const best = req.options.find((o) => o.quality === 'best');
+      if (best?.who !== ev.who) add('EVIDENCE', `${req.id}: la mejor respuesta no pasa el trabajo a quien tiene margen.`);
+      if (!d.answers[ev.question]?.facts.includes(`workload:${ev.who}`)) add('EVIDENCE', `${req.id}: la pregunta clave no revela la carga de trabajo.`);
+      if (effectiveWorkload(sc, d.day - 1, ev.who) !== 'low') add('EVIDENCE', `${req.id}: quien recibe el trabajo no tiene margen.`);
+      for (const opt of req.options)
+        if (opt.who && opt.who !== ev.who && effectiveWorkload(sc, d.day - 1, opt.who) === 'low') add('EVIDENCE', `${req.id}: hay dos personas con margen.`);
+      if (!req.options.some((x) => x.quality === 'ok' && !x.who)) add('EVIDENCE', `${req.id}: falta una respuesta aceptable para quien no tiene la información.`);
+      if (req.from === ev.who) add('EVIDENCE', `${req.id}: quien pide ayuda no puede ser quien tiene margen.`);
+    }
   });
+  // En los 3 días aparecen al menos un conflicto, una sobrecarga y una información contradictoria
+  const types = new Set(sc.days.flatMap((d) => d.support.map((r) => r.type)));
+  for (const ty of ['conflict', 'overload', 'contradiction'] as const)
+    if (!types.has(ty)) add('SITUATIONS', `Ningún día plantea una situación de tipo «${ty}».`);
   return out;
 }
 

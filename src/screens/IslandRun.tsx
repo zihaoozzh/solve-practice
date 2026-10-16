@@ -234,8 +234,8 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
                 {!exam && (
                   <p className="hint">
                     {t(
-                      'Cada persona o estación responde como mucho a una pregunta al día. Pregunta por lo que puede cambiar tus decisiones de hoy.',
-                      'Each person or station answers at most one question per day. Ask about what could change today’s decisions.',
+                      'Cada persona o estación responde como mucho a una pregunta al día. Pregunta por lo que puede cambiar tus decisiones de hoy: dónde trabaja cada uno y, en Apoyar, a quién se le puede pasar trabajo.',
+                      'Each person or station answers at most one question per day. Ask about what could change today’s decisions: where each person works and, in Support, who can take on more work.',
                     )}
                   </p>
                 )}
@@ -490,6 +490,17 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
             <div key={r.id} className="team-card" data-track={`profile:${r.id}`}>
               <div>
                 <strong>{r.name}</strong> <span className="muted small">{r.title}</span>
+              </div>
+              <div className="small profile-line">
+                <span className="good-text">
+                  {t('Fortaleza', 'Strength')}: {skillLabel(sc.lang, r.skill1)}
+                </span>
+                {' · '}
+                {t('También', 'Also')}: {skillLabel(sc.lang, r.skill2)}
+                {' · '}
+                <span className="warn-text">
+                  {t('Punto débil', 'Weakness')}: {skillLabel(sc.lang, r.weak)}
+                </span>
               </div>
               <div className="skill-bars">
                 {SKILLS.map((s) => (

@@ -388,6 +388,7 @@ export const ERROR_LABELS: Record<string, string> = {
   'sfl-reason': 'SFL: motivo de la asignación',
   'sfl-support-ok': 'SFL: respuesta de apoyo aceptable pero no la mejor',
   'sfl-support-poor': 'SFL: mala respuesta de apoyo',
+  'sfl-support-guess': 'SFL: trabajo pasado a alguien sin saber si tenía margen',
   'sfl-urgent': 'SFL: no atender primero lo urgente',
   'sfl-reflect': 'SFL: reflexión equivocada con información',
   'sfl-reflect-guess': 'SFL: reflexión por intuición',
