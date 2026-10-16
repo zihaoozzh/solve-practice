@@ -156,28 +156,27 @@ class Recorder {
   phase(name: string) {
     if (!this.meta) return;
     this.endHover();
-    // la disposición se captura tras pintar la nueva fase
+    // Evita duplicados (React en modo estricto ejecuta los efectos dos veces en desarrollo).
+    const lastPhase = [...this.events].reverse().find((e) => e.k === 'phase') as Extract<RecEvent, { k: 'phase' }> | undefined;
+    if (lastPhase && lastPhase.name === name && this.now() - lastPhase.t < 1500) return;
+    const ev: Extract<RecEvent, { k: 'phase' }> = { t: this.now(), k: 'phase', name, layout: [], vw: 0, vh: 0, dw: 0, dh: 0 };
+    void this.flush();
+    this.push(ev);
+    // La disposición se mide un instante después, cuando la nueva fase ya está pintada.
+    // (setTimeout y no requestAnimationFrame: este último se detiene si la pestaña no se está dibujando.)
     const capture = () => {
-      const layout: Region[] = [];
+      if (typeof document === 'undefined') return;
       document.querySelectorAll('[data-region]').forEach((el) => {
         const r = el.getBoundingClientRect();
         if (r.width < 4 || r.height < 4) return;
-        layout.push({ name: el.getAttribute('data-region')!, x: Math.round(r.left + window.scrollX), y: Math.round(r.top + window.scrollY), w: Math.round(r.width), h: Math.round(r.height) });
+        ev.layout.push({ name: el.getAttribute('data-region')!, x: Math.round(r.left + window.scrollX), y: Math.round(r.top + window.scrollY), w: Math.round(r.width), h: Math.round(r.height) });
       });
-      this.push({
-        t: this.now(),
-        k: 'phase',
-        name,
-        layout,
-        vw: window.innerWidth,
-        vh: window.innerHeight,
-        dw: document.documentElement.scrollWidth,
-        dh: document.documentElement.scrollHeight,
-      });
+      ev.vw = window.innerWidth;
+      ev.vh = window.innerHeight;
+      ev.dw = document.documentElement.scrollWidth;
+      ev.dh = document.documentElement.scrollHeight;
     };
-    void this.flush();
-    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => requestAnimationFrame(capture));
-    else capture();
+    setTimeout(capture, 120);
   }
 
   /** Inicio de una decisión (para medir cuánto se tarda en decidir). */

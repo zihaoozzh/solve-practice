@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { recorder } from '../lib/recorder';
 import { ConfirmButton, TraitIcon, TraitTag } from '../components/ui';
 import { TimerBadge, useCountdown } from '../components/Timer';
 import { fmtTime } from '../lib/format';
@@ -12,6 +13,7 @@ import {
   Microbe,
   microbeIndex,
   PICK,
+  profileOptions,
   POOL_MAX,
   POOL_START_MAX,
   ROUNDS,
@@ -31,7 +33,7 @@ interface Props {
   onFinish: (answers: ZoneAnswer[], aidsUsed: boolean, timedOut: boolean) => void;
 }
 
-type Step = 'review' | 'classify' | 'rounds' | 'treatment' | 'efficacy';
+type Step = 'profile' | 'review' | 'classify' | 'rounds' | 'treatment' | 'efficacy';
 
 export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = false, onFinish }: Props) {
   const ui = UI_TEXT[scenario.lang];
@@ -40,7 +42,7 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
   const confirmLabels = { confirm: ui.confirm, cancel: ui.cancel };
   const index = useRef(microbeIndex(scenario)).current;
   const [zoneIdx, setZoneIdx] = useState(0);
-  const [step, setStep] = useState<Step>('classify');
+  const [step, setStep] = useState<Step>('profile');
   const [deferredIn, setDeferredIn] = useState<string[]>([]);
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, 'keep' | 'reject'>>({});
   const [classifyIdx, setClassifyIdx] = useState(0);
@@ -70,6 +72,30 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
 
   const zone = scenario.zones[zoneIdx];
   const nextZone = scenario.zones[zoneIdx + 1];
+
+  useEffect(() => {
+    recorder.phase(`seawolf-${zoneIdx + 1}-${step}`);
+    if (step === 'profile') recorder.begin('sw-profile', String(zoneIdx));
+    if (step === 'treatment') recorder.begin('sw-treatment', String(zoneIdx));
+  }, [zoneIdx, step]);
+  useEffect(() => {
+    if (step === 'classify' && zone.classification[classifyIdx]) recorder.begin('sw-classify', zone.classification[classifyIdx].id);
+  }, [zoneIdx, step, classifyIdx]);
+  useEffect(() => {
+    if (step === 'rounds') recorder.begin('sw-round', `${zoneIdx}-${roundIdx}`);
+  }, [zoneIdx, step, roundIdx]);
+
+  // --- perfil: 2 de 7 características
+  const toggleProfile = (key: string) => {
+    if (cur.profile.includes(key)) {
+      recorder.change('sw-profile', String(zoneIdx), key, '');
+      setCur({ ...cur, profile: cur.profile.filter((k) => k !== key) });
+    } else if (cur.profile.length < 2) setCur({ ...cur, profile: [...cur.profile, key] });
+  };
+  const confirmProfile = () => {
+    recorder.decide('sw-profile', String(zoneIdx), cur.profile.join(','));
+    setStep(deferredIn.length ? 'review' : 'classify');
+  };
   const zoneElapsed = (now - zoneStart.current) / 1000;
   const isLast = zoneIdx === scenario.zones.length - 1;
   const poolStartFull = cur.pool.length >= POOL_START_MAX;
@@ -78,6 +104,7 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
   const decideReview = (id: string, d: 'keep' | 'reject') => {
     if (reviewDecisions[id]) return;
     if (d === 'keep' && poolStartFull) return;
+    recorder.decide('sw-review', id, d);
     setReviewDecisions({ ...reviewDecisions, [id]: d });
     if (d === 'keep') setCur({ ...cur, reviewKept: [...cur.reviewKept, id], pool: [...cur.pool, id] });
   };
@@ -90,6 +117,7 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
     if (!m) return;
     if (d === 'site' && poolStartFull) return;
     if (d === 'next' && isLast) return;
+    recorder.decide('sw-classify', m.id, d);
     setCur({ ...cur, decisions: { ...cur.decisions, [m.id]: d }, pool: d === 'site' ? [...cur.pool, m.id] : cur.pool });
     if (classifyIdx + 1 >= CLASSIFY_N) setStep('rounds');
     else setClassifyIdx(classifyIdx + 1);
@@ -97,6 +125,7 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
 
   // --- rondas de "elige 1 de 3"
   const pickRound = (id: string) => {
+    recorder.decide('sw-round', `${zoneIdx}-${roundIdx}`, id);
     const picks = [...cur.roundPicks];
     picks[roundIdx] = id;
     setCur({ ...cur, roundPicks: picks, pool: [...cur.pool, id] });
@@ -106,8 +135,13 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
 
   // --- tratamiento: se puede cambiar la selección hasta enviarla
   const toggleSelect = (id: string) => {
-    if (cur.selected.includes(id)) setCur({ ...cur, selected: cur.selected.filter((x) => x !== id) });
-    else if (cur.selected.length < PICK) setCur({ ...cur, selected: [...cur.selected, id] });
+    if (cur.selected.includes(id)) {
+      recorder.change('sw-treatment', id, 'on', 'off');
+      setCur({ ...cur, selected: cur.selected.filter((x) => x !== id) });
+    } else if (cur.selected.length < PICK) {
+      recorder.answer('sw-treatment', id, 'on');
+      setCur({ ...cur, selected: [...cur.selected, id] });
+    }
   };
 
   const advance = (ans: ZoneAnswer) => {
@@ -121,7 +155,7 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
     setZoneIdx(zoneIdx + 1);
     setDeferredIn(deferred);
     setReviewDecisions({});
-    setStep(deferred.length ? 'review' : 'classify');
+    setStep('profile');
     setClassifyIdx(0);
     setRoundIdx(0);
     setCur(emptyZoneAnswer());
@@ -130,6 +164,7 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
   };
 
   const submitZone = () => {
+    recorder.decide('sw-treatment', String(zoneIdx), cur.selected.join(','));
     const ans: ZoneAnswer = { ...cur, timeSec: (Date.now() - zoneStart.current) / 1000, completed: true };
     setCur(ans);
     if (exam) advance(ans);
@@ -138,12 +173,12 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
 
   const poolLimit = step === 'review' || step === 'classify' ? POOL_START_MAX : POOL_MAX;
   const stepLabel: Record<Step, string> = en
-    ? { review: 'Review', classify: 'Sorting', rounds: 'Pick 1 of 3', treatment: 'Treatment', efficacy: 'Result' }
-    : { review: 'Revisión', classify: 'Clasificación', rounds: 'Elige 1 de 3', treatment: 'Tratamiento', efficacy: 'Resultado' };
+    ? { profile: 'Profile', review: 'Review', classify: 'Sorting', rounds: 'Pick 1 of 3', treatment: 'Treatment', efficacy: 'Result' }
+    : { profile: 'Perfil', review: 'Revisión', classify: 'Clasificación', rounds: 'Elige 1 de 3', treatment: 'Tratamiento', efficacy: 'Resultado' };
 
   return (
     <div className="run seawolf">
-      <header className="run-header">
+      <header className="run-header" data-region="header">
         <div className="run-title">
           <span className="brand-dot sea" /> {label ?? 'Sea Wolf'}
           <span className="seed-chip">
@@ -183,8 +218,46 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
       </header>
 
       <div className="layout">
-        <main className="main">
+        <main className="main" data-region="seawolf">
           <ZoneBrief zone={zone} ui={ui} aids={aids} />
+
+          {step === 'profile' && (
+            <>
+              <div className="wave-head">
+                <h2>{en ? 'Site profile' : 'Perfil del sitio'}</h2>
+                {!exam && (
+                  <p className="hint">
+                    {en
+                      ? 'Choose the 2 characteristics that best describe what this site needs.'
+                      : 'Elige las 2 características que mejor describen lo que necesita este sitio.'}
+                  </p>
+                )}
+              </div>
+              <div className="profile-grid" data-region="profile">
+                {profileOptions(zone).map((o) => {
+                  const on = cur.profile.includes(o.key);
+                  return (
+                    <button
+                      key={o.key}
+                      type="button"
+                      className={`profile-option ${on ? 'selected' : ''}`}
+                      disabled={!on && cur.profile.length >= 2}
+                      onClick={() => toggleProfile(o.key)}
+                      data-track={`profile:${o.key}`}
+                      aria-pressed={on}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="actions">
+                <button type="button" className="btn primary" disabled={cur.profile.length !== 2} onClick={confirmProfile}>
+                  {en ? `Confirm profile (${cur.profile.length}/2) →` : `Confirmar perfil (${cur.profile.length}/2) →`}
+                </button>
+              </div>
+            </>
+          )}
 
           {step === 'review' && (
             <>
@@ -374,7 +447,7 @@ export function SeaWolfRun({ scenario, durationSec, initialAids, label, exam = f
           )}
         </main>
 
-        <aside className="side">
+        <aside className="side" data-region="pool">
           <div className="panel">
             <div className="panel-title">
               Pool{' '}
@@ -428,7 +501,7 @@ function abbr(attr: string) {
 
 function ZoneBrief({ zone, ui, aids }: { zone: Zone; ui: UI; aids: boolean }) {
   return (
-    <div className="zone-brief card">
+    <div className="zone-brief card" data-region="rules" data-track="rules">
       <div className="zone-head">
         <div>
           <div className="q-num">
@@ -481,7 +554,7 @@ function RangeBar({ lo, hi }: { lo: number; hi: number }) {
 
 function MicrobeCard({ m, zone, ui, action, highlight, big }: { m: Microbe; zone: Zone; ui: UI; action: React.ReactNode; highlight?: boolean; big?: boolean }) {
   return (
-    <div className={`microbe ${highlight ? 'highlight' : ''} ${big ? 'big' : ''}`}>
+    <div className={`microbe ${highlight ? 'highlight' : ''} ${big ? 'big' : ''}`} data-track={`microbe:${m.id}`}>
       <div className="microbe-head">
         <span className="microbe-name">{m.name}</span>
         {action}

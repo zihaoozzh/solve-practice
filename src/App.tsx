@@ -2,35 +2,51 @@ import { useEffect, useMemo, useState } from 'react';
 import { Home, RunConfig } from './screens/Home';
 import { RedrockRun } from './screens/RedrockRun';
 import { SeaWolfRun } from './screens/SeaWolfRun';
-import { RedrockRunResult, Results, SeaWolfRunResult, seaWolfScore } from './screens/Results';
+import { RedrockRunResult, Results, SeaWolfRunResult } from './screens/Results';
 import { Stats } from './screens/Stats';
-import { generateRedrock, gradeCase, gradeRedrock } from './redrock';
-import { generateSeaWolf, gradeZone, microbeIndex } from './seawolf';
+import { generateRedrock, gradeCase } from './redrock';
+import { generateSeaWolf } from './seawolf';
 import { randomSeed } from './lib/rng';
-import { addHistory, clearHistory, exportHistory, HistoryEntry, loadHistory, PhaseStat, Source } from './lib/history';
-import { TIMING } from './config';
+import { addHistory, clearHistory, exportHistory, HistoryEntry, loadHistory, Mode, PhaseStat, Source } from './lib/history';
+import { durationSec } from './config';
+import { recorder, SessionLog } from './lib/recorder';
+import { buildAnalysis, FullAnalysis } from './analysis';
 
-type Screen = 'home' | 'stats' | 'redrock' | 'interlude' | 'seawolf' | 'results';
+type Module = 'redrock' | 'seawolf';
+type Screen = 'home' | 'stats' | 'run' | 'interlude' | 'results';
+
+const PLAN: Record<Mode, Module[]> = {
+  redrock: ['redrock'],
+  seawolf: ['seawolf'],
+  full: ['redrock', 'seawolf'],
+  full95: ['redrock', 'seawolf'],
+  'sfl-island': [],
+  'sfl-classic': [],
+};
+
+const MODULE_LABEL: Record<Module, string> = { redrock: 'Redrock Study', seawolf: 'Sea Wolf' };
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [config, setConfig] = useState<RunConfig>({ mode: 'full', difficulty: 'normal', seed: '', aids: false, exam: false, lang: 'es' });
   const [runId, setRunId] = useState(0);
+  const [step, setStep] = useState(0);
   const [redrock, setRedrock] = useState<RedrockRunResult | undefined>();
   const [seawolf, setSeawolf] = useState<SeaWolfRunResult | undefined>();
   const [stats, setStats] = useState<{ entries: HistoryEntry[]; source: Source; file?: string } | null>(null);
   const [savedTo, setSavedTo] = useState<Source | null>(null);
+  const [analysis, setAnalysis] = useState<FullAnalysis | undefined>();
+  const [log, setLog] = useState<SessionLog | null>(null);
+  const [sessionSaved, setSessionSaved] = useState<boolean | null>(null);
+  const [previous, setPrevious] = useState<HistoryEntry[]>([]);
 
-  const rrScenario = useMemo(
-    () => (config.seed && config.mode !== 'seawolf' ? generateRedrock(config.seed, config.difficulty, config.lang) : null),
-    [config, runId],
-  );
-  const swScenario = useMemo(
-    () => (config.seed && config.mode !== 'redrock' ? generateSeaWolf(config.seed, config.difficulty, config.lang) : null),
-    [config, runId],
-  );
+  const plan = PLAN[config.mode];
+  const current = plan[step];
 
-  const inRun = screen === 'redrock' || screen === 'seawolf';
+  const rrScenario = useMemo(() => (config.seed && plan.includes('redrock') ? generateRedrock(config.seed, config.difficulty, config.lang) : null), [config, runId]);
+  const swScenario = useMemo(() => (config.seed && plan.includes('seawolf') ? generateSeaWolf(config.seed, config.difficulty, config.lang) : null), [config, runId]);
+
+  const inRun = screen === 'run';
   useEffect(() => {
     if (!inRun) return;
     const h = (e: BeforeUnloadEvent) => {
@@ -52,8 +68,13 @@ export default function App() {
     setRedrock(undefined);
     setSeawolf(undefined);
     setSavedTo(null);
+    setAnalysis(undefined);
+    setLog(null);
+    setSessionSaved(null);
+    setStep(0);
     setRunId((x) => x + 1);
-    go(c.mode === 'seawolf' ? 'seawolf' : 'redrock');
+    recorder.start({ mode: c.mode, seed, difficulty: c.difficulty, lang: c.lang, exam: c.exam });
+    go('run');
   };
 
   const openStats = async () => {
@@ -61,20 +82,59 @@ export default function App() {
     go('stats');
   };
 
-  const finishAll = (rr?: RedrockRunResult, sw?: SeaWolfRunResult) => {
+  /** Pasa a la siguiente prueba del plan o termina la sesión. */
+  const next = (rr?: RedrockRunResult, sw?: SeaWolfRunResult) => {
+    if (step + 1 < plan.length) {
+      recorder.phase('pausa');
+      setStep(step + 1);
+      go('interlude');
+      return;
+    }
+    void finishAll(rr ?? redrock, sw ?? seawolf);
+  };
+
+  const finishAll = async (rr?: RedrockRunResult, sw?: SeaWolfRunResult) => {
+    const { log: sessionLog, savedToFile } = await recorder.finish();
+    const prev = (await loadHistory()).entries.filter((e) => e.mode === config.mode);
+    const a = buildAnalysis({
+      redrock: rr && { scenario: rr.scenario, answers: rr.answers, times: rr.times },
+      seawolf: sw && { scenario: sw.scenario, answers: sw.answers },
+      log: sessionLog,
+    });
     const phases: PhaseStat[] = [];
-    const detail: HistoryEntry['detail'] = {};
-    const scores: number[] = [];
     if (rr) {
-      const g = gradeRedrock(rr.scenario, rr.answers);
-      const pct = (c: number, t: number) => Math.round((c / t) * 100);
-      phases.push(
-        { key: 'investigacion', name: 'Investigación', timeSec: rr.times.investigation },
-        { key: 'analisis', name: 'Análisis', timeSec: rr.times.analysis, correct: g.analysis.correct, total: g.analysis.total, score: pct(g.analysis.correct, g.analysis.total) },
-        { key: 'informe', name: 'Informe', timeSec: rr.times.report, correct: g.report.correct, total: g.report.total, score: pct(g.report.correct, g.report.total) },
-        { key: 'casos', name: 'Mini-casos', timeSec: rr.times.cases, correct: g.cases.correct, total: g.cases.total, score: pct(g.cases.correct, g.cases.total) },
-      );
-      detail.journalPrecision = g.journal.precision;
+      const part = (k: string) => a.games.find((g) => g.game === 'redrock')!.parts.find((p) => p.key === k)!;
+      const ph = (key: string, name: string, timeSec: number, pk: string) => {
+        const p = part(pk);
+        phases.push({ key, name, timeSec, score: Math.round((p.earned / p.max) * 100), correct: p.earned, total: p.max });
+      };
+      ph('investigacion', 'Investigación', rr.times.investigation, 'journal');
+      ph('analisis', 'Análisis', rr.times.analysis, 'analysis');
+      ph('informe', 'Informe', rr.times.report, 'report');
+      ph('casos', 'Mini-casos', rr.times.cases, 'cases');
+    }
+    if (sw) {
+      const g = a.games.find((x) => x.game === 'seawolf')!;
+      sw.scenario.zones.forEach((_, i) => {
+        const ps = g.parts.filter((p) => p.key.startsWith(`sw${i}-`));
+        const earned = ps.reduce((s, p) => s + p.earned, 0);
+        phases.push({ key: `zona-${i + 1}`, name: `Sitio ${i + 1}`, timeSec: sw.answers[i].timeSec, score: Math.round(earned), correct: earned, total: 100 });
+      });
+    }
+    // Partes agregadas por tipo (Sea Wolf suma los 3 sitios) para la evolución
+    const parts: NonNullable<HistoryEntry['parts']> = [];
+    for (const g of a.games)
+      for (const p of g.parts) {
+        const key = g.game === 'seawolf' ? `seawolf-${p.key.split('-')[1]}` : `${g.game}-${p.key}`;
+        const label = g.game === 'seawolf' ? `Sea Wolf · ${p.label.split(' · ')[1]}` : `${g.label} · ${p.label}`;
+        const cur = parts.find((x) => x.key === key);
+        if (cur) {
+          cur.earned = Math.round((cur.earned + p.earned) * 10) / 10;
+          cur.max += p.max;
+        } else parts.push({ key, label, earned: p.earned, max: p.max });
+      }
+    const detail: HistoryEntry['detail'] = {};
+    if (rr) {
       detail.caseTypes = {};
       for (const c of rr.scenario.cases) {
         const cur = detail.caseTypes[c.type] ?? { correct: 0, total: 0 };
@@ -82,34 +142,28 @@ export default function App() {
         if (gradeCase(c, rr.answers.cases[c.id])) cur.correct++;
         detail.caseTypes[c.type] = cur;
       }
-      scores.push(g.overall);
-      if (rr.timedOut) detail.timedOut = true;
     }
-    if (sw) {
-      let valid = 0;
-      const index = microbeIndex(sw.scenario);
-      sw.scenario.zones.forEach((z, i) => {
-        const g = gradeZone(z, sw.answers[i], index);
-        if (g.check.valid) valid++;
-        phases.push({ key: `zona-${i + 1}`, name: `Sitio ${i + 1}`, timeSec: sw.answers[i].timeSec, correct: g.check.rulesOk, total: g.check.rulesTotal, score: g.score });
-      });
-      detail.validZones = valid;
-      scores.push(seaWolfScore(sw));
-      if (sw.timedOut) detail.timedOut = true;
-    }
+    if (rr?.timedOut || sw?.timedOut) detail.timedOut = true;
     const entry: HistoryEntry = {
       id: `${Date.now()}`,
       date: new Date().toISOString(),
       mode: config.mode,
       difficulty: config.difficulty,
       seed: config.seed,
-      score: Math.round(scores.reduce((a, b) => a + b, 0) / Math.max(scores.length, 1)),
+      score: Math.round(a.overall.scorePct),
+      scorePct: a.overall.scorePct,
       phases,
+      parts,
+      errors: a.errors,
       aids: sw?.aidsUsed,
       exam: config.exam,
       lang: config.lang,
       detail,
     };
+    setAnalysis(a);
+    setLog(sessionLog);
+    setSessionSaved(savedToFile);
+    setPrevious(prev);
     addHistory(entry).then(setSavedTo);
     go('results');
   };
@@ -132,50 +186,51 @@ export default function App() {
         />
       )}
 
-      {screen === 'redrock' && rrScenario && (
+      {screen === 'run' && current === 'redrock' && rrScenario && (
         <RedrockRun
           key={`rr-${runId}`}
           scenario={rrScenario}
-          durationSec={TIMING.redrockSec}
+          durationSec={durationSec('redrock')}
           exam={config.exam}
-          label={config.mode === 'full' ? 'Parte 1: Redrock Study' : undefined}
+          label={plan.length > 1 ? `Parte ${step + 1}: Redrock Study` : undefined}
           onFinish={(answers, times, timedOut) => {
             const res = { scenario: rrScenario, answers, times, timedOut };
             setRedrock(res);
-            if (config.mode === 'full') go('interlude');
-            else finishAll(res, undefined);
+            next(res, undefined);
+          }}
+        />
+      )}
+
+      {screen === 'run' && current === 'seawolf' && swScenario && (
+        <SeaWolfRun
+          key={`sw-${runId}`}
+          scenario={swScenario}
+          durationSec={durationSec('seawolf')}
+          initialAids={config.aids}
+          exam={config.exam}
+          label={plan.length > 1 ? `Parte ${step + 1}: Sea Wolf` : undefined}
+          onFinish={(answers, aidsUsed, timedOut) => {
+            const res = { scenario: swScenario, answers, aidsUsed, timedOut };
+            setSeawolf(res);
+            next(undefined, res);
           }}
         />
       )}
 
       {screen === 'interlude' && (
         <div className="interlude card">
-          <div className="q-num">Simulación completa</div>
-          <h1>Parte 1 terminada</h1>
+          <div className="q-num">
+            Parte {step} de {plan.length} terminada
+          </div>
+          <h1>Siguiente: {MODULE_LABEL[plan[step]]}</h1>
           <p>
-            Redrock Study está cerrado. La corrección aparecerá al final, junto con Sea Wolf. Cuando estés listo, empieza la Parte 2 ({Math.round(TIMING.seawolfSec / 60)}{' '}
-            minutos).
+            Igual que en la prueba real, entre juegos vuelves al menú de tareas: el tiempo sobrante no pasa a la siguiente prueba. La corrección aparecerá al final, junto
+            con el resto. Empieza cuando estés listo ({Math.round(durationSec(plan[step]) / 60) || 1} min).
           </p>
-          <button type="button" className="btn primary big" onClick={() => go('seawolf')}>
-            Empezar Sea Wolf →
+          <button type="button" className="btn primary big" onClick={() => go('run')}>
+            Empezar {MODULE_LABEL[plan[step]]} →
           </button>
         </div>
-      )}
-
-      {screen === 'seawolf' && swScenario && (
-        <SeaWolfRun
-          key={`sw-${runId}`}
-          scenario={swScenario}
-          durationSec={TIMING.seawolfSec}
-          initialAids={config.aids}
-          exam={config.exam}
-          label={config.mode === 'full' ? 'Parte 2: Sea Wolf' : undefined}
-          onFinish={(answers, aidsUsed, timedOut) => {
-            const res = { scenario: swScenario, answers, aidsUsed, timedOut };
-            setSeawolf(res);
-            finishAll(redrock, res);
-          }}
-        />
       )}
 
       {screen === 'results' && (
@@ -184,6 +239,10 @@ export default function App() {
           redrock={redrock}
           seawolf={seawolf}
           savedTo={savedTo}
+          analysis={analysis}
+          log={log}
+          sessionSaved={sessionSaved}
+          previous={previous}
           onHome={() => go('home')}
           onStats={openStats}
           onRepeat={() => start(config)}

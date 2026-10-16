@@ -1,4 +1,8 @@
 import { ReactNode } from 'react';
+import type { FullAnalysis } from '../analysis';
+import type { SessionLog } from '../lib/recorder';
+import type { HistoryEntry } from '../lib/history';
+import { AnalysisView } from './AnalysisView';
 import { Chart } from '../components/Chart';
 import { SimpleTable, TraitIcon } from '../components/ui';
 import { fmt, fmtTime } from '../lib/format';
@@ -25,6 +29,12 @@ interface Props {
   redrock?: RedrockRunResult;
   seawolf?: SeaWolfRunResult;
   savedTo?: 'file' | 'browser' | null;
+  analysis?: FullAnalysis;
+  log?: SessionLog | null;
+  sessionSaved?: boolean | null;
+  previous?: HistoryEntry[];
+  /** Contenido extra de la corrección (p. ej. SFL). */
+  extraReview?: ReactNode;
   onHome: () => void;
   onStats?: () => void;
   onRepeat: () => void;
@@ -36,19 +46,19 @@ export function seaWolfScore(r: SeaWolfRunResult): number {
   return Math.round(g.reduce((s, x) => s + x.score, 0) / g.length);
 }
 
-export function Results({ mode, redrock, seawolf, savedTo, onHome, onStats, onRepeat }: Props) {
+export function Results({ mode, redrock, seawolf, savedTo, analysis, log = null, sessionSaved = null, previous = [], extraReview, onHome, onStats, onRepeat }: Props) {
   const rr = redrock ? gradeRedrock(redrock.scenario, redrock.answers) : null;
   const sw = seawolf ? seaWolfScore(seawolf) : null;
-  const overall = rr && sw != null ? Math.round((rr.overall + sw) / 2) : (rr?.overall ?? sw ?? 0);
-  const seed = redrock?.scenario.seed ?? seawolf?.scenario.seed;
-  const difficulty = redrock?.scenario.difficulty ?? seawolf?.scenario.difficulty;
+  const overall = analysis ? analysis.overall.scorePct : rr && sw != null ? Math.round((rr.overall + sw) / 2) : (rr?.overall ?? sw ?? 0);
+  const seed = redrock?.scenario.seed ?? seawolf?.scenario.seed ?? log?.meta.seed;
+  const difficulty = redrock?.scenario.difficulty ?? seawolf?.scenario.difficulty ?? log?.meta.difficulty;
 
   return (
     <div className="results">
       <header className="results-header">
         <div>
           <div className="q-num">Resultados · {MODE_LABEL[mode]}</div>
-          <h1>{overall}%</h1>
+          <h1>{overall.toLocaleString('es-ES', { maximumFractionDigits: 1 })} %</h1>
           <div className="muted">
             Semilla <strong>{seed}</strong> · {difficulty === 'hard' ? 'Difícil' : 'Normal'}
           </div>
@@ -70,8 +80,11 @@ export function Results({ mode, redrock, seawolf, savedTo, onHome, onStats, onRe
           </button>
         </div>
       </header>
+      {analysis && <AnalysisView analysis={analysis} log={log} sessionSaved={sessionSaved} previous={previous} />}
+      <h2 className="section-title">Revisión detallada</h2>
       {redrock && rr && <RedrockReview r={redrock} />}
       {seawolf && <SeaWolfReview r={seawolf} />}
+      {extraReview}
     </div>
   );
 }
@@ -105,7 +118,6 @@ function RedrockReview({ r }: { r: RedrockRunResult }) {
     <section className="review">
       <h2>Redrock Study {r.timedOut && <span className="tag warn">tiempo agotado</span>}</h2>
       <div className="stats">
-        <Stat label="Puntuación Redrock" value={`${g.overall}%`} />
         <Stat label="Análisis" value={`${pct(g.analysis.correct, g.analysis.total)}%`} sub={`${g.analysis.correct}/${g.analysis.total}`} />
         <Stat label="Informe" value={`${pct(g.report.correct, g.report.total)}%`} sub={`${g.report.correct}/${g.report.total}`} />
         <Stat label="Casos" value={`${pct(g.cases.correct, g.cases.total)}%`} sub={`${g.cases.correct}/${g.cases.total}`} />
@@ -296,7 +308,7 @@ function SeaWolfReview({ r }: { r: SeaWolfRunResult }) {
         {r.aidsUsed && <span className="tag">con ayudas de práctica</span>}
       </h2>
       <div className="stats">
-        <Stat label="Puntuación Sea Wolf" value={`${seaWolfScore(r)}%`} sub="media de eficacia por sitio (−20 % por regla fallida)" />
+        <Stat label="Eficacia media" value={`${seaWolfScore(r)}%`} sub="como en la prueba: −20 % por regla fallida del tratamiento" />
         <Stat label="Sitios al 100 %" value={`${valid}/${s.zones.length}`} />
         {s.zones.map((z, i) => (
           <Stat key={i} label={`Sitio ${i + 1}`} value={`${grades[i].score}%`} sub={`${fmtTime(answers[i]?.timeSec ?? 0)} (guía ≈${z.suggestedMin}:00)`} />

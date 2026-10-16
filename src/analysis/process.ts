@@ -8,6 +8,7 @@ import type { RedrockScenario } from '../redrock/types';
 import type { RedrockAnswers } from '../redrock';
 import type { GameRubric, RubricItem } from './rubric';
 import { ERROR_LABELS } from './rubric';
+import { phaseLabel } from './context';
 
 export interface Pattern {
   id: string;
@@ -278,7 +279,7 @@ export function detectPatterns(input: PatternInput): Pattern[] {
         .slice()
         .sort((a, b) => b.ms - a.ms)
         .slice(0, 5)
-        .map((e) => `${fmtTime(e.from / 1000)}: ${(e.ms / 1000).toFixed(0)} s en ${phaseAt(ev, e.from)}`),
+        .map((e) => `${fmtTime(e.from / 1000)}: ${(e.ms / 1000).toFixed(0)} s en ${phaseLabel(phaseAt(ev, e.from))}`),
       severity: total > 120_000 ? 'alta' : 'baja',
     });
   }
@@ -357,6 +358,33 @@ export function makeTips(games: GameRubric[], patterns: Pattern[]): string[] {
         break;
       case 'sw-profile':
         text = 'En el perfil, elige el rasgo deseado del sitio y el atributo cuyo rango está más lejos del centro de la escala.';
+        break;
+      case 'rr-blank':
+        text = `Dejaste ${n} respuesta${n === 1 ? '' : 's'} de Redrock sin contestar (p. ej. ${ex.label}). Vigila la guía de tiempo de cada fase y, si te atascas, deja una estimación antes de avanzar: en blanco siempre vale 0.`;
+        break;
+      case 'rr-analysis-wrong':
+        text = `En ${ex.label.toLowerCase()} ${ex.why?.replace('Respondiste', 'respondiste') ?? ''} Escribe la fórmula con los datos del diario antes de teclear y comprueba el signo y las unidades del resultado.`;
+        break;
+      case 'rr-report-wrong':
+        text = `Fallaste ${n} hueco${n === 1 ? '' : 's'} del Informe (p. ej. ${ex.label}: ${ex.why ?? ''}). Rellena el memorando a partir de tus resultados de Análisis, en el mismo orden.`;
+        break;
+      case 'case:pct_change':
+        text = 'En el mini-caso de cambio porcentual divide siempre entre el valor INICIAL: (final − inicial) / inicial × 100.';
+        break;
+      case 'case:pp_vs_pct':
+        text = 'Lee si el mini-caso pide puntos porcentuales (resta directa de tasas) o cambio relativo (resta dividida entre la tasa inicial): es la trampa de ese caso.';
+        break;
+      case 'case:weighted_mean':
+        text = 'En la media ponderada multiplica cada tasa por su número de individuos y divide entre el total; mira si alguna nota al pie excluye un grupo.';
+        break;
+      case 'case:ratio_units':
+        text = 'Antes de comparar densidades, pasa todas las superficies a la misma unidad (1 km² = 100 ha).';
+        break;
+      case 'case:projection':
+        text = 'En las proyecciones fíjate en si el enunciado da un % anual (compuesto: ×(1+r) cada año) o un aumento fijo (simple: + la misma cantidad cada año), y cuenta bien los años.';
+        break;
+      case 'case:chart_read':
+        text = 'En la lectura de gráficos calcula la diferencia de cada tramo entre años consecutivos (absoluta o porcentual, según pida) antes de elegir.';
         break;
       default:
         text = `${ERROR_LABELS[key] ?? key}: ${ex.why ?? ''}`;

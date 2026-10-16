@@ -1,7 +1,7 @@
 // Historial de intentos. Con `npm run dev` / `npm run preview` se guarda en data/intentos.json
 // (fichero local del proyecto). Si ese servidor no está disponible (versión estática), se usa el navegador.
 
-export type Mode = 'redrock' | 'seawolf' | 'full';
+export type Mode = 'redrock' | 'seawolf' | 'full' | 'full95' | 'sfl-island' | 'sfl-classic';
 export type Lang = 'es' | 'en';
 
 export interface PhaseStat {
@@ -24,6 +24,12 @@ export interface HistoryEntry {
   aids?: boolean;
   exam?: boolean;
   lang?: Lang;
+  /** Puntos por parte según la rúbrica (para la evolución). */
+  parts?: { key: string; label: string; earned: number; max: number }[];
+  /** Nota global con un decimal (rúbrica). */
+  scorePct?: number;
+  /** Frecuencia de cada tipo de error en este intento. */
+  errors?: Record<string, number>;
   detail?: {
     journalPrecision?: number;
     caseTypes?: Record<string, { correct: number; total: number }>;
@@ -131,5 +137,8 @@ export function exportHistory(entries: HistoryEntry[]) {
 export const MODE_LABEL: Record<Mode, string> = {
   redrock: 'Redrock',
   seawolf: 'Sea Wolf',
-  full: 'Simulación completa',
+  full: 'Simulación 65 min',
+  full95: 'Simulación 95 min',
+  'sfl-island': 'SFL Island',
+  'sfl-classic': 'SFL Classic',
 };

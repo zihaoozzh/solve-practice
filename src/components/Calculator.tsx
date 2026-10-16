@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { recorder } from '../lib/recorder';
 
 export interface CalcHistoryItem {
   expr: string;
@@ -91,6 +92,7 @@ export function Calculator({ expr, setExpr, history, setHistory, onSave, labels 
   const compute = () => {
     try {
       const r = formatResult(evaluate(expr));
+      recorder.calc(expr, r);
       setHistory([{ expr, result: r }, ...history].slice(0, 30));
       setExpr(r);
     } catch {
@@ -99,7 +101,7 @@ export function Calculator({ expr, setExpr, history, setHistory, onSave, labels 
   };
 
   return (
-    <div className="calc">
+    <div className="calc" data-region="calculator">
       <div className="panel-title">{labels.title}</div>
       <input
         ref={inputRef}

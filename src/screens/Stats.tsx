@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Chart } from '../components/Chart';
 import { fmtTime } from '../lib/format';
 import { HistoryEntry, Mode, MODE_LABEL, Source } from '../lib/history';
+import { ERROR_LABELS } from '../analysis/rubric';
 
 interface Props {
   entries: HistoryEntry[];
@@ -67,6 +68,31 @@ export function Stats({ entries, source, file, onBack, onClear, onExport }: Prop
     return [...map.entries()].sort((a, b) => pctOf(a[1].correct, a[1].total) - pctOf(b[1].correct, b[1].total));
   }, [list]);
 
+  // Nota por parte según la rúbrica
+  const partRows = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; values: number[] }>();
+    for (const e of list)
+      for (const p of e.parts ?? []) {
+        const cur = map.get(p.key) ?? { key: p.key, label: p.label, values: [] };
+        cur.values.push(p.max ? (p.earned / p.max) * 100 : 0);
+        map.set(p.key, cur);
+      }
+    return [...map.values()].map((r) => ({ ...r, trend: avg(r.values.slice(-3)) - avg(r.values.slice(-6, -3)) }));
+  }, [list]);
+
+  // Frecuencia de errores por intento
+  const errorRows = useMemo(() => {
+    const withErrors = list.filter((e) => e.errors);
+    const keys = new Set(withErrors.flatMap((e) => Object.keys(e.errors ?? {})));
+    return [...keys]
+      .map((key) => {
+        const series = withErrors.map((e) => e.errors?.[key] ?? 0);
+        const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+        return { key, series, total: sum(series), last5: sum(series.slice(-5)), prev5: sum(series.slice(-10, -5)) };
+      })
+      .sort((a, b) => b.total - a.total);
+  }, [list]);
+
   const chartList = list.slice(-20);
   const phaseKeysForChart = ['analisis', 'informe', 'casos', 'zona-1', 'zona-2', 'zona-3'].filter((k) => chartList.some((e) => e.phases.some((p) => p.key === k)));
 
@@ -99,7 +125,7 @@ export function Stats({ entries, source, file, onBack, onClear, onExport }: Prop
       <div className="config-row">
         <span className="config-label">Filtrar</span>
         <div className="segmented">
-          {(['all', 'redrock', 'seawolf', 'full'] as const).map((m) => (
+          {(['all', 'redrock', 'seawolf', 'sfl-island', 'sfl-classic', 'full', 'full95'] as const).map((m) => (
             <button key={m} type="button" className={mode === m ? 'selected' : ''} onClick={() => setMode(m)}>
               {m === 'all' ? 'Todos' : MODE_LABEL[m]}
             </button>
@@ -188,6 +214,71 @@ export function Stats({ entries, source, file, onBack, onClear, onExport }: Prop
               ))}
             </tbody>
           </table>
+
+          {partRows.length > 0 && (
+            <>
+              <h3>Nota por parte (rúbrica)</h3>
+              <table className="history-table">
+                <thead>
+                  <tr>
+                    <th>Parte</th>
+                    <th>Intentos</th>
+                    <th>Media</th>
+                    <th>Últimos 3</th>
+                    <th>Tendencia</th>
+                    <th>Evolución (más reciente a la derecha)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {partRows.map((r) => (
+                    <tr key={r.key}>
+                      <td>{r.label}</td>
+                      <td>{r.values.length}</td>
+                      <td>{show(avg(r.values))}</td>
+                      <td>{show(avg(r.values.slice(-3)))}</td>
+                      <td className={r.trend > 0 ? 'ok-text' : r.trend < 0 ? 'lost' : ''}>{Number.isFinite(r.trend) ? `${r.trend > 0 ? '+' : ''}${Math.round(r.trend)}` : '—'}</td>
+                      <td>
+                        <span className="sparkline">
+                          {r.values.slice(-10).map((v, i) => (
+                            <span key={i} style={{ height: `${Math.max(4, v * 0.4)}px` }} title={`${Math.round(v)} %`} />
+                          ))}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {errorRows.length > 0 && (
+            <>
+              <h3>Errores más frecuentes</h3>
+              <p className="muted small">Veces que aparece cada tipo de error. Compara los últimos 5 intentos con los 5 anteriores para ver si mejoras.</p>
+              <table className="history-table">
+                <thead>
+                  <tr>
+                    <th>Tipo de error</th>
+                    <th>Total</th>
+                    <th>Últimos 5</th>
+                    <th>5 anteriores</th>
+                    <th>Por intento (más reciente a la derecha)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {errorRows.map((r) => (
+                    <tr key={r.key}>
+                      <td>{ERROR_LABELS[r.key] ?? r.key}</td>
+                      <td>{r.total}</td>
+                      <td className={r.last5 < r.prev5 ? 'ok-text' : r.last5 > r.prev5 && r.prev5 > 0 ? 'lost' : ''}>{r.last5}</td>
+                      <td>{r.prev5}</td>
+                      <td className="small">{r.series.slice(-10).join(' · ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
 
           {caseTypes.length > 0 && (
             <>

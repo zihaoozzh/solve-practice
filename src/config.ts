@@ -5,6 +5,10 @@ export const TIMING = {
   redrockSec: 35 * 60,
   /** Un solo reloj para los 3 sitios (~30 min) [web de preparación]. */
   seawolfSec: 30 * 60,
+  /** SFL Island: ~30 min en un solo reloj para los 3 días [web de preparación]. */
+  sflIslandSec: 30 * 60,
+  /** SFL Classic: ~20 min [web de preparación]. */
+  sflClassicSec: 20 * 60,
   /** Presupuestos orientativos (no hay temporizadores oficiales por fase). */
   redrockPhaseGuideSec: { investigation: 6 * 60, analysis: 10 * 60, report: 6 * 60, cases: 12 * 60 },
   redrockStudyGuideSec: 22 * 60,
@@ -17,3 +21,17 @@ export const TIMING = {
 
 /** Límite del diario: NO confirmado por ninguna fuente; se mantiene como restricción de práctica. */
 export const JOURNAL_LIMIT = 8;
+
+/**
+ * Duración real de cada prueba. Para probar qué pasa al agotarse el tiempo se puede abrir la app con
+ * `?segundos=N` en la URL: cada prueba dura entonces N segundos.
+ */
+export function durationSec(module: 'redrock' | 'seawolf' | 'sfl-island' | 'sfl-classic'): number {
+  try {
+    const override = Number(new URLSearchParams(window.location.search).get('segundos'));
+    if (Number.isFinite(override) && override > 0) return override;
+  } catch {
+    /* sin ventana (tests) */
+  }
+  return { redrock: TIMING.redrockSec, seawolf: TIMING.seawolfSec, 'sfl-island': TIMING.sflIslandSec, 'sfl-classic': TIMING.sflClassicSec }[module];
+}
