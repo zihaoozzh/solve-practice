@@ -325,20 +325,24 @@ export interface Overall {
 
 /**
  * Nota global y lista de puntos perdidos ordenada de mayor a menor.
- * Los porcentajes se reparten por mayores restos para que sumen EXACTAMENTE 100 − nota.
+ * Con varias pruebas, cada una pesa lo mismo en la nota (media de sus porcentajes), como en una simulación
+ * en la que Redrock (100 puntos) no debe valer menos que Sea Wolf (300). Los porcentajes de cada fallo se reparten
+ * por mayores restos para que sumen EXACTAMENTE 100 − nota.
  */
 export function overall(games: GameRubric[]): Overall {
   const maxT = games.reduce((s, g) => s + T(g.max), 0);
   const earnedT = games.reduce((s, g) => s + T(g.earned), 0);
-  const scoreTenths = maxT ? Math.round((earnedT / maxT) * 1000) : 0;
+  const valid = games.filter((g) => T(g.max) > 0);
+  const scoreTenths = valid.length ? Math.round(valid.reduce((s, g) => s + (T(g.earned) / T(g.max)) * 1000, 0) / valid.length) : 0;
   const lostList = games.flatMap((g) =>
-    g.parts.flatMap((p) => p.items.map((item) => ({ game: g.game, gameLabel: g.label, part: p.label, item, lostT: T(item.max) - T(item.earned) }))),
+    g.parts.flatMap((p) => p.items.map((item) => ({ game: g.game, gameLabel: g.label, part: p.label, item, lostT: T(item.max) - T(item.earned), gameMaxT: T(g.max) }))),
   );
   const losing = lostList.filter((l) => l.lostT > 0);
-  const pctT = apportion(1000 - scoreTenths, losing.map((l) => l.lostT));
+  // Peso de cada fallo en la nota: lo que pierde dentro de su prueba, dividido entre el número de pruebas
+  const pctT = apportion(1000 - scoreTenths, losing.map((l) => l.lostT / l.gameMaxT));
   const pointsOff = losing
     .map((l, i) => ({ game: l.game, gameLabel: l.gameLabel, part: l.part, item: l.item, lost: P(l.lostT), pct: pctT[i] / 10 }))
-    .sort((a, b) => b.lost - a.lost || b.pct - a.pct);
+    .sort((a, b) => b.pct - a.pct || b.lost - a.lost);
   return { max: P(maxT), earned: P(earnedT), scorePct: scoreTenths / 10, pointsOff };
 }
 

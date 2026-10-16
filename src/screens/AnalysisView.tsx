@@ -32,7 +32,7 @@ export function AnalysisView({ analysis: a, log, sessionSaved, previous }: Props
           <div className="stat-label">Nota global</div>
           <div className="stat-value">{n1(a.overall.scorePct)} %</div>
           <div className="stat-sub">
-            {n1(a.overall.earned)} de {n1(a.overall.max)} puntos
+            {a.games.length > 1 ? `Media de las ${a.games.length} pruebas (cada una pesa lo mismo)` : `${n1(a.overall.earned)} de ${n1(a.overall.max)} puntos`}
           </div>
         </div>
         {a.games.map((g) => (
@@ -81,7 +81,7 @@ export function AnalysisView({ analysis: a, log, sessionSaved, previous }: Props
       <h3>Dónde se fueron los puntos</h3>
       <div className="card">
         <p className="muted small">
-          Ordenado de mayor a menor. «% de la nota» es lo que ese fallo resta a tu nota global. Total perdido: {n1(lostTotal)} puntos ={' '}
+          Ordenado por lo que resta a tu nota. «% de la nota» es lo que ese fallo resta a tu nota global (con varias pruebas, cada una pesa lo mismo). Total perdido: {n1(lostTotal)} puntos ={' '}
           {n1(100 - a.overall.scorePct)} % de la nota.
         </p>
         <table className="mini-table points-off">

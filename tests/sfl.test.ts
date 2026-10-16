@@ -291,3 +291,25 @@ describe('SFL Classic', () => {
     }
   });
 });
+
+describe('Nota global con varias pruebas', () => {
+  it('cada prueba pesa lo mismo y los porcentajes perdidos siguen sumando 100 − nota', () => {
+    const isl = generateIsland('mix', 'normal');
+    const cl = generateClassic('mix', 'normal');
+    const gi = gradeIsland(isl, perfectPlay(isl)).rubric; // 300 de 300
+    const gc = gradeClassic(cl, emptyClassic()).rubric; // 0 de 100
+    const o = overall([gi, gc]);
+    expect(o.scorePct).toBe(50);
+    expect(Math.round(o.pointsOff.reduce((s, p) => s + p.pct, 0) * 10)).toBe(500);
+    // Con fallos en las dos, un punto de la prueba pequeña resta más nota que uno de la grande
+    const half = perfectPlay(isl);
+    half[0].assign = { ...isl.days[0].baseline };
+    const o2 = overall([gradeIsland(isl, half).rubric, gradeClassic(cl, emptyClassic()).rubric]);
+    const perPoint = (game: string) => {
+      const xs = o2.pointsOff.filter((p) => p.game === game);
+      return xs.reduce((s, p) => s + p.pct, 0) / xs.reduce((s, p) => s + p.lost, 0);
+    };
+    expect(perPoint('sfl-classic')).toBeGreaterThan(perPoint('sfl-island'));
+    expect(Math.round(o2.pointsOff.reduce((s, p) => s + p.pct, 0) * 10)).toBe(1000 - Math.round(o2.scorePct * 10));
+  });
+});

@@ -98,7 +98,10 @@ export function Replay({ slice, describe }: { slice: PhaseSlice; describe: (e: R
 
   useEffect(() => {
     if (!playing) return;
-    const step = (now: number) => {
+    // Temporizador en lugar de requestAnimationFrame: sigue avanzando aunque la pestaña no se esté pintando
+    last.current = performance.now();
+    raf.current = window.setInterval(() => {
+      const now = performance.now();
       const prev = last.current ?? now;
       last.current = now;
       setT((cur) => {
@@ -109,11 +112,9 @@ export function Replay({ slice, describe }: { slice: PhaseSlice; describe: (e: R
         }
         return nt;
       });
-      raf.current = requestAnimationFrame(step);
-    };
-    raf.current = requestAnimationFrame(step);
+    }, 40);
     return () => {
-      if (raf.current) cancelAnimationFrame(raf.current);
+      if (raf.current) window.clearInterval(raf.current);
       raf.current = null;
       last.current = null;
     };
