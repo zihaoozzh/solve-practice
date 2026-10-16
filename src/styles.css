@@ -300,3 +300,6 @@ code { background: var(--line-soft); padding: 1px 6px; border-radius: 4px; font-
 .stats.compact .stat-value { font-size: 20px; }
 .bottleneck { background: var(--amber-soft); border-radius: 8px; padding: 8px 12px; font-size: 14px; margin: 8px 0 12px; }
 .missed { margin: 6px 0; padding-left: 18px; font-size: 14px; }
+.legend-swatch.s4 { background: #5f8f3e; }
+.legend-swatch.s5 { background: #b8486a; }
+.legend-swatch.s6 { background: #8a7a2e; }

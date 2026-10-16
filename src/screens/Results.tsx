@@ -422,9 +422,9 @@ function MicrobeTable({ zone, ids, byId, inSol }: { zone: SeaWolfScenario['zones
             ))}
             <td>
               {m.traits.map((t) => (
-                <span key={t} className="trait-inline" title={traitLabel(t)}>
+                <span key={t} className="trait-inline" title={traitLabel(t, zone.lang)}>
                   <TraitIcon trait={t} size={14} />
-                  {traitLabel(t)}
+                  {traitLabel(t, zone.lang)}
                 </span>
               ))}
             </td>

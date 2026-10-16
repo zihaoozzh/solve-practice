@@ -1,7 +1,7 @@
 import type { ChartSpec } from '../redrock/types';
 import { fmt } from '../lib/format';
 
-const COLORS = ['#2f6f73', '#c7793a', '#6b7fb3', '#9a5b8f'];
+const COLORS = ['#2f6f73', '#c7793a', '#6b7fb3', '#9a5b8f', '#5f8f3e', '#b8486a', '#8a7a2e'];
 
 interface Props {
   spec: ChartSpec;
@@ -27,7 +27,7 @@ export function Chart({ spec, width = 560, height = 260, onDatumClick, savedIds 
   const w = width - m.l - m.r;
   const h = height - m.t - m.b;
   const all = spec.series.flatMap((s) => s.values).filter((v) => Number.isFinite(v));
-  const max = niceMax(Math.max(...all, 0) * 1.12);
+  const max = spec.yMax ?? niceMax(Math.max(...all, 0) * 1.12);
   const y = (v: number) => m.t + h - (v / max) * h;
   const n = spec.labels.length;
   const band = w / Math.max(n, 1);

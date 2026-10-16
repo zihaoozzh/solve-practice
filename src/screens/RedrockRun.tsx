@@ -498,7 +498,7 @@ function Journal({
       ))}
       {calcs.length > 0 && (
         <>
-          <div className="journal-section">{ui.calculator}</div>
+          <div className="journal-section">{ui.savedCalcs}</div>
           {calcs.map((c, i) => (
             <button
               key={i}

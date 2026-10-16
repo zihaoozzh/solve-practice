@@ -17,7 +17,7 @@ const ui = {
     insertInCalc: 'Insertar en la calculadora',
     remove: 'Quitar',
     investigationHint: (n: number) =>
-      `Haz clic en las cifras que necesites para guardarlas en el diario de investigación (máx. ${n}). En la siguiente fase el material desaparece: solo tendrás el diario.`,
+      `Haz clic en las cifras que necesites para guardarlas en el diario de investigación (máx. ${n}). En Análisis el material no se ve, pero puedes volver a Investigación hasta que pases al Informe.`,
     analysisHint: 'Responde con los datos del diario. Haz clic en una entrada del diario para insertarla en la calculadora.',
     goAnalysis: 'Ir a Análisis →',
     goReport: 'Ir a Informe →',
@@ -40,6 +40,7 @@ const ui = {
     warnNextCase: 'No podrás volver a este caso.',
     warnFinishRedrock: 'Terminarás Redrock.',
     calculator: 'Calculadora',
+    savedCalcs: 'Cálculos guardados',
     history: 'Historial',
     clear: 'borrar',
     confirm: 'Sí, continuar',
@@ -86,7 +87,7 @@ const ui = {
     insertInCalc: 'Insert into calculator',
     remove: 'Remove',
     investigationHint: (n: number) =>
-      `Click the figures you need to save them in the research journal (max. ${n}). In the next phase the material disappears: you will only have the journal.`,
+      `Click the figures you need to save them in the research journal (max. ${n}). The material is hidden in Analysis, but you can return to Investigation until you move to the Report.`,
     analysisHint: 'Answer using the data in your journal. Click a journal entry to insert it into the calculator.',
     goAnalysis: 'Go to Analysis →',
     goReport: 'Go to Report →',
@@ -109,6 +110,7 @@ const ui = {
     warnNextCase: 'You cannot return to this case.',
     warnFinishRedrock: 'You will finish Redrock.',
     calculator: 'Calculator',
+    savedCalcs: 'Saved calculations',
     history: 'History',
     clear: 'clear',
     confirm: 'Yes, continue',

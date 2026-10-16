@@ -47,6 +47,8 @@ export interface ChartSpec {
   decimals?: number;
   /** false para no rotular cada punto (gráficos con muchas series). */
   showValues?: boolean;
+  /** Máximo fijo del eje Y (p. ej. 100 para porcentajes). */
+  yMax?: number;
 }
 
 export type Material = (

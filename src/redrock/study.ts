@@ -106,10 +106,10 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
 
   if (areaInKm2) {
     add({ id: 'AREA', value: areaKm2, display: fmt(areaKm2, 1), unit: 'km²', label: tr(t, `Área censada en ${t.siteA}`, `${t.siteA} surveyed area`) });
-    add({ id: 'RES', value: reserveHa, display: fmt(reserveHa), unit: 'ha', label: tr(t, `Superficie total de la reserva (${t.region})`, `${t.region} reserve total area`), note: 'Área total de la reserva, no del área censada en el sitio A: trampa plausible pero irrelevante.' });
+    add({ id: 'RES', value: reserveHa, display: fmt(reserveHa), unit: 'ha', label: tr(t, `Superficie total de la reserva (${t.region})`, `${t.region} reserve total area`), note: `Superficie total de la reserva, no el área censada en ${t.siteA}: trampa plausible pero irrelevante.` });
   } else {
     add({ id: 'AREA', value: areaHa, display: fmt(areaHa), unit: 'ha', label: `Área censada en ${t.siteA}` });
-    add({ id: 'RES', value: reserveKm2, display: fmt(reserveKm2, 1), unit: 'km²', label: `Superficie total de la reserva (${t.region})`, note: 'Área total de la reserva, no del área censada en el sitio A: trampa plausible pero irrelevante.' });
+    add({ id: 'RES', value: reserveKm2, display: fmt(reserveKm2, 1), unit: 'km²', label: `Superficie total de la reserva (${t.region})`, note: `Superficie total de la reserva, no el área censada en ${t.siteA}: trampa plausible pero irrelevante.` });
   }
   const f1 = t.extraFacts[0];
   const f2 = t.extraFacts[1];
@@ -283,7 +283,9 @@ function tryGenerate(rng: Rng, t: Theme, difficulty: Difficulty): Study | null {
   for (const d of Object.values(data)) {
     if (d.relevant || d.note) continue;
     d.note =
-      d.id === 'AREA'
+      d.meta?.series === 'census'
+        ? `Año intermedio del censo: el objetivo compara ${y1} con ${y4}, así que los años intermedios no entran en ningún cálculo.`
+        : d.id === 'AREA'
         ? 'El área censada solo hacía falta si se pedía la densidad; en este escenario ninguna pregunta la usa.'
         : 'Ninguna pregunta de este escenario necesita esta cifra.';
   }
