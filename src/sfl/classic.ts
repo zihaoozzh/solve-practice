@@ -350,19 +350,19 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
       question: t('¿Cómo fijas el criterio de éxito?', 'How do you set the success criterion?'),
       options: [
         opt(
-          t(`Acordar ahora por escrito con el comité el umbral del ${sc.target} % y cómo se medirá.`, `Agree in writing now with the committee on the ${sc.target}% threshold and how it will be measured.`),
+          t(`Acordar ya por escrito con el comité el umbral del ${sc.target} % y cómo medirlo.`, `Agree in writing now with the committee on the ${sc.target}% bar and how to measure it.`),
           'best',
           t('Un umbral acordado antes de ver resultados evita discusiones y sesgos después.', 'A threshold agreed before seeing results avoids arguments and bias later.'),
           t('El comité firma el criterio.', 'The committee signs off the criterion.'),
         ),
         opt(
-          t('Usar el umbral que se aplicó en otro proyecto parecido.', 'Use the threshold applied in another similar project.'),
+          t('Usar el umbral que se aplicó en otro proyecto parecido, que ya está documentado y probado.', 'Use the threshold from another similar project, which is already documented and tested.'),
           'ok',
           t('Es un umbral explícito, pero no es el que ha fijado este comité.', 'It is an explicit threshold, but not the one this committee set.'),
           t('Hay un umbral, aunque el comité no lo ha validado.', 'There is a threshold, although the committee has not validated it.'),
         ),
         opt(
-          t('Decidir el umbral cuando lleguen los primeros resultados.', 'Decide the threshold when the first results come in.'),
+          t('Decidir el umbral cuando lleguen los primeros resultados y se vea qué es realista.', 'Decide the threshold once the first results arrive and it is clear what is realistic.'),
           'poor',
           t('Fijar el listón después de ver los datos invita a ajustarlo a lo que salga.', 'Setting the bar after seeing the data invites fitting it to the results.'),
           t('El piloto arranca sin criterio de éxito acordado.', 'The pilot starts without an agreed success criterion.'),
@@ -418,7 +418,7 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
           t('Te cuenta que en dos zonas el calendario choca con la temporada alta; lo ajustas.', 'They tell you that in two areas the schedule clashes with peak season; you adjust it.'),
         ),
         opt(
-          t('En la próxima reunión, pedirle delante de todos que dé su opinión.', 'At the next meeting, ask them in front of everyone for their opinion.'),
+          t('En la próxima reunión, pedirle delante de todo el equipo que dé su opinión sobre el calendario.', 'At the next meeting, ask them in front of the whole team for their view on the schedule.'),
           'ok',
           t('Busca su opinión, pero en el formato en que menos cómodo se siente.', 'It seeks their view, but in the format where they are least comfortable.'),
           t('Comenta algo breve sobre el calendario, sin entrar en detalles.', 'They say something brief about the schedule, without details.'),
@@ -446,7 +446,7 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
           t('Es riguroso, pero gasta el margen del calendario en variables que no cambian la decisión.', 'It is rigorous, but uses up the schedule slack on variables that do not change the decision.'),
           t('El análisis es completo, pero ya no queda margen en el calendario.', 'The analysis is complete, but there is no slack left in the schedule.'),
         ),
-        opt(t('Empezar sin analizar nada: los datos del piloto lo dirán todo.', 'Start without analysing anything: the pilot data will tell us everything.'), 'poor', t('Sin hipótesis previas, el piloto no sabrá qué observar.', 'Without prior hypotheses, the pilot will not know what to look at.'), t('El piloto empieza sin hipótesis claras.', 'The pilot starts without clear hypotheses.')),
+        opt(t('Empezar ya sin análisis previo: los datos del piloto dirán qué importa.', 'Start now with no prior analysis: the pilot data will show what matters.'), 'poor', t('Sin hipótesis previas, el piloto no sabrá qué observar.', 'Without prior hypotheses, the pilot will not know what to look at.'), t('El piloto empieza sin hipótesis claras.', 'The pilot starts without clear hypotheses.')),
       ],
       info: t('El plazo de 6 meses y que solo unas pocas variables mueven el objetivo.', 'The 6-month deadline and that only a few variables drive the goal.'),
       when: brief,
@@ -461,18 +461,18 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
       question: t('¿Cómo respondes?', 'How do you respond?'),
       options: [
         opt(
-          t('Explicar los criterios con transparencia y ofrecer su entrada en la siguiente fase si el piloto funciona.', 'Explain the criteria transparently and offer them a place in the next phase if the pilot works.'),
+          t('Explicar los criterios y ofrecerle entrar en la fase siguiente si el piloto funciona.', 'Explain the criteria and offer them a place in the next phase if the pilot works.'),
           'best',
           t('Mantiene la validez del piloto y cuida la relación.', 'It keeps the pilot valid and looks after the relationship.'),
           t('Aceptan esperar a la siguiente fase.', 'They agree to wait for the next phase.'),
         ),
         opt(
-          t('Aplazar la respuesta hasta tener resultados.', 'Postpone the answer until there are results.'),
+          t('Aplazar la respuesta hasta tener resultados del piloto y, entonces, valorar si su zona puede entrar.', 'Postpone the answer until the pilot has results and then assess whether their area can join.'),
           'ok',
           t('No rompe el piloto, pero deja la petición sin responder.', 'It does not break the pilot, but leaves the request unanswered.'),
           t('Siguen esperando una respuesta.', 'They are still waiting for an answer.'),
         ),
-        opt(t('Incluir su zona para evitar el conflicto.', 'Include their area to avoid conflict.'), 'poor', t('Rompe los criterios y contamina la comparación del piloto.', 'It breaks the criteria and contaminates the pilot comparison.'), t('Su zona entra en el piloto.', 'Their area joins the pilot.')),
+        opt(t('Incluir su zona en el piloto para evitar un conflicto con un actor con tanta influencia.', 'Include their area in the pilot to avoid a conflict with such an influential stakeholder.'), 'poor', t('Rompe los criterios y contamina la comparación del piloto.', 'It breaks the criteria and contaminates the pilot comparison.'), t('Su zona entra en el piloto.', 'Their area joins the pilot.')),
       ],
       info: t('Los criterios de selección del piloto.', 'The pilot selection criteria.'),
       when: t('En esta pantalla y en el briefing.', 'On this screen and in the briefing.'),
@@ -497,7 +497,7 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
       t('El comité acepta dejarlo para la fase 2.', 'The committee agrees to leave it for phase 2.'),
     ),
     opt(
-      t('Aceptarlo completo: es una petición del comité.', 'Accept it in full: it is a committee request.'),
+      t('Aceptarlo completo: lo pide un miembro del comité y negarse ahora complicaría la aprobación final.', 'Accept it in full: a committee member asked, and refusing now would complicate final approval.'),
       'poor',
       t('Amplía el alcance sin negociar el plazo ni el presupuesto.', 'It expands the scope without negotiating deadline or budget.'),
       t('El equipo se sobrecarga.', 'The team becomes overloaded.'),
@@ -532,13 +532,13 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
       question: t('¿Qué comunicas?', 'What do you communicate?'),
       options: [
         opt(
-          t('Los resultados tal cual, con sus limitaciones y lo que vais a comprobar antes del final.', 'The results as they are, with their limitations and what you will check before the end.'),
+          t('Los resultados tal cual, con sus límites y qué comprobaréis antes del final.', 'The results as they are, their limits and what you will check before the end.'),
           'best',
           t('Transparencia con contexto y próximos pasos.', 'Transparency with context and next steps.'),
           t('El comité agradece la claridad.', 'The committee appreciates the clarity.'),
         ),
         opt(t('Nada hasta tener los resultados finales.', 'Nothing until the final results.'), 'ok', t('Evita conclusiones prematuras, pero deja al comité sin información.', 'It avoids premature conclusions, but leaves the committee uninformed.'), t('El comité insiste en saber algo.', 'The committee insists on hearing something.')),
-        opt(t('Solo la zona que va bien, para mantener el apoyo.', 'Only the area that is going well, to keep support.'), 'poor', t('Ocultar lo que va mal mina la confianza cuando se sepa.', 'Hiding what goes badly undermines trust once it comes out.'), t('El comité se queda con una imagen incompleta.', 'The committee is left with an incomplete picture.')),
+        opt(t('Solo la zona que va bien, para mantener el apoyo del comité.', 'Only the area that is going well, to keep the committee on side.'), 'poor', t('Ocultar lo que va mal mina la confianza cuando se sepa.', 'Hiding what goes badly undermines trust once it comes out.'), t('El comité se queda con una imagen incompleta.', 'The committee is left with an incomplete picture.')),
       ],
       info: t('Que los resultados eran mixtos.', 'That the results were mixed.'),
       when: t('En esta pantalla.', 'On this screen.'),
@@ -575,7 +575,7 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
             t(`Se abre un análisis específico de ${outName}.`, `A specific analysis of ${outName} is opened.`),
           ),
           opt(
-            t(`Descartar ${outName} como dato atípico y seguir con los otros dos.`, `Discard ${outName} as an outlier and continue with the other two.`),
+            t(`Descartar ${outName} como dato atípico, porque distorsiona la media, y seguir con los otros dos segmentos.`, `Discard ${outName} as an outlier, since it distorts the average, and continue with the other two segments.`),
             'poor',
             t('Descartar un tercio de los datos sin entenderlo oculta información.', 'Discarding a third of the data without understanding it hides information.'),
             t(`${outName} desaparece del análisis.`, `${outName} disappears from the analysis.`),
@@ -602,7 +602,7 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
         options: [
           opt(t('Comprobar qué pasó esa semana antes de incluirla en las conclusiones.', 'Check what happened that week before including it in the conclusions.'), 'best', t('Un dato extremo se entiende antes de usarlo o descartarlo.', 'An extreme value is understood before using or discarding it.'), t('Era una recogida extraordinaria puntual; se anota aparte.', 'It was a one-off extra collection; it is recorded separately.')),
           opt(t('Excluir esa semana del cálculo.', 'Exclude that week from the calculation.'), 'ok', t('Probablemente correcto, pero sin comprobarlo.', 'Probably right, but unchecked.'), t('La semana queda fuera sin explicación.', 'The week is left out without explanation.')),
-          opt(t('Incluirla: mejora el resultado del piloto.', 'Include it: it improves the pilot result.'), 'poor', t('Usa un dato atípico porque conviene.', 'It uses an outlier because it is convenient.'), t('El resultado queda inflado.', 'The result is inflated.')),
+          opt(t('Incluirla: es un dato real del piloto y mejora el resultado.', 'Include it: it is real pilot data and it improves the result.'), 'poor', t('Usa un dato atípico porque conviene.', 'It uses an outlier because it is convenient.'), t('El resultado queda inflado.', 'The result is inflated.')),
         ],
         info: t('Que el indicador era el correcto y el salto era aislado.', 'That the indicator was the right one and the jump was isolated.'),
         when: t('En esta pantalla.', 'On this screen.'),
@@ -616,12 +616,12 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
         question: t('¿Qué haces?', 'What do you do?'),
         options: [
           opt(
-            t(`Pedir también los datos de «${L(th.primary)}» y explicar al comité el cambio de indicador.`, `Also request the data on "${L(th.primary)}" and explain the indicator change to the committee.`),
+            t(`Pedir también los datos de «${L(th.primary)}» y explicar el cambio al comité.`, `Also request data on "${L(th.primary)}" and explain the change to the committee.`),
             'best',
             t('Corrige a tiempo el indicador: sin él no se puede comprobar el objetivo.', 'It corrects the indicator in time: without it the goal cannot be checked.'),
             t('A partir de ahora se recogen los datos del objetivo.', 'From now on the goal data are collected.'),
           ),
-          opt(t('Estimar el objetivo a partir del indicador que hay.', 'Estimate the goal from the indicator you have.'), 'ok', t('Da una aproximación, pero con mucha incertidumbre.', 'It gives an approximation, but with high uncertainty.'), t('Se trabaja con una estimación.', 'You work with an estimate.')),
+          opt(t('Estimar el objetivo a partir del indicador que ya hay, con un modelo sencillo que relacione los dos.', 'Estimate the goal from the indicator you already have, with a simple model linking the two.'), 'ok', t('Da una aproximación, pero con mucha incertidumbre.', 'It gives an approximation, but with high uncertainty.'), t('Se trabaja con una estimación.', 'You work with an estimate.')),
           opt(t('Seguir con el indicador actual: es el que se acordó.', 'Carry on with the current indicator: it is the one agreed.'), 'poor', t('Al final no podrás demostrar si se cumple el objetivo.', 'In the end you will not be able to show whether the goal is met.'), t('El piloto sigue sin medir el objetivo.', 'The pilot continues without measuring the goal.')),
         ],
         info: t(`Que el indicador elegido en la decisión 2 no medía «${L(th.primary)}».`, `That the indicator chosen in decision 2 did not measure "${L(th.primary)}".`),
@@ -639,8 +639,8 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
       question: t('¿Qué haces?', 'What do you do?'),
       options: [
         opt(t('Activar el plan alternativo para esas 3 semanas y avisar al comité del impacto.', 'Activate the fallback plan for those 3 weeks and tell the committee about the impact.'), 'best', t('Gestiona el riesgo y comunica a tiempo.', 'It manages the risk and communicates in time.'), t('El impacto queda acotado.', 'The impact is contained.')),
-        opt(t('Cambiar de proveedor de inmediato.', 'Switch supplier immediately.'), 'ok', t('Puede funcionar, pero sin evaluar coste ni plazo del cambio.', 'It may work, but without assessing the cost or timing of the switch.'), t('El nuevo proveedor tarda en adaptarse.', 'The new supplier takes time to adapt.')),
-        opt(t('Esperar sin decir nada: 3 semanas se recuperan.', 'Wait without saying anything: 3 weeks can be recovered.'), 'poor', t('Oculta un riesgo y no lo mitiga.', 'It hides a risk and does not mitigate it.'), t('El retraso llega al comité por otra vía.', 'The delay reaches the committee another way.')),
+        opt(t('Cambiar de proveedor de inmediato para no perder las 3 semanas, aunque haya que negociar otro contrato.', 'Switch supplier immediately so as not to lose the 3 weeks, even if a new contract must be negotiated.'), 'ok', t('Puede funcionar, pero sin evaluar coste ni plazo del cambio.', 'It may work, but without assessing the cost or timing of the switch.'), t('El nuevo proveedor tarda en adaptarse.', 'The new supplier takes time to adapt.')),
+        opt(t('Esperar sin decir nada al comité: 3 semanas se recuperan en lo que queda de calendario.', 'Wait without telling the committee: 3 weeks can be made up over the rest of the schedule.'), 'poor', t('Oculta un riesgo y no lo mitiga.', 'It hides a risk and does not mitigate it.'), t('El retraso llega al comité por otra vía.', 'The delay reaches the committee another way.')),
       ],
       info: t('El aviso del proveedor.', 'The supplier warning.'),
       when: t('En esta pantalla.', 'On this screen.'),
@@ -656,12 +656,12 @@ function makeDecisions(sc: ClassicScenario, th: Theme, lang: Lang, _naive: strin
       question: t('¿Qué haces?', 'What do you do?'),
       options: [
         opt(
-          t(`Poner en marcha primero «${iname(dep.prereq)}» y reprogramar «${iname(dep.dependent)}».`, `Launch "${iname(dep.prereq)}" first and reschedule "${iname(dep.dependent)}".`),
+          t(`Lanzar antes «${iname(dep.prereq)}» y reprogramar «${iname(dep.dependent)}».`, `Launch "${iname(dep.prereq)}" first; reschedule "${iname(dep.dependent)}".`),
           'best',
           t('Respeta la dependencia que ya estaba en el briefing.', 'It respects the dependency already in the briefing.'),
           t('El orden se corrige, con un mes de retraso.', 'The order is corrected, with a one-month delay.'),
         ),
-        opt(t('Lanzar las dos a la vez con presupuesto extra.', 'Launch both at once with extra budget.'), 'ok', t('Resuelve el bloqueo, pero el presupuesto no admitía ampliaciones.', 'It removes the block, but the budget could not be increased.'), t('Se pide una ampliación que el comité no ve con buenos ojos.', 'An increase is requested that the committee frowns upon.')),
+        opt(t('Lanzar las dos iniciativas a la vez, pidiendo presupuesto extra para no perder más tiempo del calendario.', 'Launch both initiatives at once, asking for extra budget so as not to lose more time on the schedule.'), 'ok', t('Resuelve el bloqueo, pero el presupuesto no admitía ampliaciones.', 'It removes the block, but the budget could not be increased.'), t('Se pide una ampliación que el comité no ve con buenos ojos.', 'An increase is requested that the committee frowns upon.')),
         opt(t(`Seguir con «${iname(dep.dependent)}» y esperar que funcione.`, `Carry on with "${iname(dep.dependent)}" and hope it works.`), 'poor', t('Ignora una dependencia conocida.', 'It ignores a known dependency.'), t('El piloto sigue bloqueado.', 'The pilot remains blocked.')),
       ],
       info: dep.text,

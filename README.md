@@ -33,7 +33,7 @@ La investigación sobre la prueba (fuentes, contradicciones y lo que no está co
 ## Comandos
 
 - `npm test`: tests de generadores, validadores, rúbricas y detector de patrones con Vitest.
-- `npm run check`: genera 50 escenarios por módulo (Redrock, Sea Wolf, SFL Island y SFL Classic), dificultad e idioma, y comprueba que ninguno falla su validador (`npm run check -- 200` para más).
+- `npm run check`: genera 50 escenarios por módulo (Redrock, Sea Wolf, SFL Island y SFL Classic), dificultad e idioma, y comprueba que ninguno falla su validador (`npm run check -- 200` para más). En el SFL comprueba también que la longitud de las opciones no delata la mejor: la mejor no puede ser casi siempre la más larga, ni la más corta, ni la intermedia.
 - `npm run build`: versión estática en `dist/`. `npm run preview` la sirve en local (y también guarda los intentos y los registros en ficheros).
 
 ## Modos
@@ -61,10 +61,12 @@ Entre pruebas de una simulación aparece una pantalla intermedia, como el menú 
   - El Informe es un párrafo con huecos más un gráfico de barras, líneas o tarta.
 - **Sea Wolf:** en cada sitio eliges el perfil (2 características), clasificas 10 microbios (pool de hasta 6), completas el pool con 4 rondas de "elige 1 de 3" y eliges un tratamiento de 3. Cada sitio garantiza un trío válido alcanzable siguiendo la regla de clasificación.
 - **SFL Island:**
+  - 4 investigadores con perfil propio: especialidad (fortaleza), segunda habilidad y punto débil.
   - Cada día tiene un objetivo (atender a las personas, cubrir las estaciones o equilibrar ambas cosas) y 4 fases:
-    - **Explorar:** 3, 3 y 2 preguntas según el día. Cada persona o estación responde a una sola pregunta al día, y las notas se borran por la noche.
+    - **Explorar:** 3, 3 y 2 preguntas según el día. Cada persona o estación responde a una sola pregunta al día, y las notas se borran por la noche. El presupuesto es justo: en Difícil no sobra ninguna pregunta y en Normal como mucho una, así que cada pregunta malgastada te deja sin un dato que luego necesitas.
     - **Asignar:** cada movimiento pide un motivo de una lista cerrada.
-    - **Apoyar:** 4 peticiones al día (conflicto, sobrecarga, datos contradictorios, dependencias, bienestar o delegación). Una de ellas es urgente, y el orden en que las atiendes cuenta.
+    - **Apoyar:** 4 peticiones al día (conflicto, sobrecarga, datos contradictorios, dependencias, bienestar, delegación o encargo extra). Una de ellas es urgente, y el orden en que las atiendes cuenta.
+      - Cada día, una de las peticiones consiste en pasarle trabajo a alguien. Solo una persona tiene margen, y solo lo sabes si le preguntaste cómo estaba en Explorar. Sin ese dato, la opción prudente vale una puntuación parcial, y elegir un nombre al azar cuenta como decisión por intuición.
     - **Reflexionar:** valoras el ánimo o la carga de cada investigador, con "No lo sé" como opción.
   - Lo que contestas a una petición cambia el ánimo de esa persona al día siguiente.
   - Las cifras dudosas (preguntas por día, notas que se borran, peticiones por día) se pueden cambiar en `ISLAND_CONFIG`, en `src/sfl/island.ts`.
@@ -86,7 +88,11 @@ Cada escenario se comprueba antes de mostrarse. Si no pasa, se descarta y se gen
   - se puede deducir con las preguntas clave, que caben en el presupuesto del día;
   - no se acierta sin explorar.
 
-  Además, cada petición tiene exactamente una mejor respuesta y otra aceptable.
+  Además:
+  - Cada petición tiene exactamente una mejor respuesta y otra aceptable.
+  - La petición que depende de lo explorado solo se resuelve bien con la pregunta clave.
+  - Las preguntas clave caben en el presupuesto sin dejar más holgura de la permitida.
+  - En los 3 días aparecen al menos un conflicto, una sobrecarga y unos datos contradictorios.
 - **SFL Classic:** el ranking tiene un orden claro, cada pantalla tiene una mejor respuesta y una aceptable, y las respuestas sobre segmentos y escalado salen de los datos mostrados.
 
 ## Corrección y análisis
@@ -107,7 +113,7 @@ Al terminar ves, en este orden:
    - Cambios de opinión.
    - Decisiones rápidas que fallan.
    - En Sea Wolf, en qué ronda perdiste la solución y qué microbio la habría salvado.
-   - En el SFL: preguntas gastadas en información irrelevante o demasiado pronto, asignaciones por intuición sin la información, reflexión sin pruebas y errores tempranos que arrastras.
+   - En el SFL: preguntas gastadas en información irrelevante o demasiado pronto, asignaciones (o trabajo pasado a alguien) por intuición sin la información, reflexión sin pruebas y errores tempranos que arrastras.
 7. **Mapa de calor del ratón** y **repetición** de cada fase, a x1, x4 o x8.
 8. **Revisión detallada:**
    - Redrock y Sea Wolf, paso a paso.

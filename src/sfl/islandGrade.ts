@@ -7,6 +7,7 @@ import type { PartTime } from '../analysis';
 import type { RecEvent } from '../lib/recorder';
 import {
   answerText,
+  dayKeyQuestions,
   la,
   hadEvidence,
   IslandDayAnswer,
@@ -19,7 +20,7 @@ import {
 
 export const ISLAND_RULES = {
   explore:
-    'Explorar (20 por día): los puntos se reparten entre las preguntas clave del día, las que revelan un dato que cambia la mejor asignación. Una pregunta irrelevante no resta, pero gasta una pregunta que luego falta.',
+    'Explorar (20 por día): los puntos se reparten entre las preguntas clave del día: las que revelan un dato que cambia la mejor asignación y la que dice quién tiene margen para la petición de Apoyar que depende de ello. Una pregunta irrelevante no resta, pero gasta una pregunta que luego falta.',
   assign: 'Asignar (30 por día): 7,5 por cada investigador en la estación de la asignación óptima (la de mayor valor según el objetivo del día).',
   reasons:
     'Motivos (10 por día): se reparten entre los investigadores que la asignación óptima mueve de su estación habitual. Cuentan si los moviste bien y elegiste un motivo aceptable.',
@@ -67,11 +68,16 @@ export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[]): Isl
     const qLabel = (qid: string) => day.questions.find((q) => q.id === qid)?.label ?? qid;
 
     // ---- Explorar
-    const keyQs = [...new Set(day.keyFacts.map((f) => f.question))];
+    const keyQs = dayKeyQuestions(day);
     const exT = splitEven(200, keyQs.length);
     const exploreItems: RubricItem[] = keyQs.map((qid, i) => {
       const asked = !!a?.asked.includes(qid);
-      const facts = day.keyFacts.filter((f) => f.question === qid).map((f) => f.explanation);
+      const linked = day.support.filter((r) => r.evidence?.question === qid);
+      const facts = [...day.keyFacts.filter((f) => f.question === qid).map((f) => f.explanation), ...linked.map((r) => r.evidence!.explanation)];
+      const effect = [
+        ...(day.keyFacts.some((f) => f.question === qid) ? ['cambia la mejor asignación del día'] : []),
+        ...linked.map((r) => `decide la petición «${r.title}» de ${rn(r.from)} en Apoyar`),
+      ].join(' y ');
       decisions.push({
         id: `isl${d}-key-${qid}`,
         day: d + 1,
@@ -80,7 +86,7 @@ export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[]): Isl
         yours: asked ? 'La hiciste' : 'No la hiciste',
         best: 'Hacerla',
         ok: asked,
-        why: `Revelaba que ${facts.join(' y ')}, y eso cambia la mejor asignación del día.`,
+        why: `Revelaba que ${facts.join(' y ')}, y eso ${effect}.`,
         info: facts.join('; '),
         when: `${tag}, fase Explorar, antes de asignar.`,
       });
@@ -187,6 +193,10 @@ export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[]): Isl
       const chosen = idx == null ? null : req.options[idx];
       const q = chosen?.quality ?? 'poor';
       const best = req.options.find((o) => o.quality === 'best')!;
+      const ev = req.evidence;
+      const knew = !!ev && !!a?.asked.includes(ev.question);
+      // Pasar trabajo a alguien concreto sin haber preguntado quién tenía margen es decidir por intuición
+      const guessed = !!ev && !!chosen?.who && !knew;
       decisions.push({
         id: `isl${d}-support-${req.id}`,
         day: d + 1,
@@ -195,9 +205,11 @@ export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[]): Isl
         yours: chosen ? chosen.text : 'Sin responder',
         best: best.text,
         ok: q === 'best' ? true : q === 'ok' ? 'partial' : false,
-        why: chosen && q !== 'best' ? `${chosen.why} La mejor: ${best.why}` : best.why,
-        info: 'El propio mensaje: qué pide, quién está implicado y si hay un dato que verificar.',
-        when: `${tag}, fase Apoyar.`,
+        why: `${chosen && q !== 'best' ? `${chosen.why} La mejor: ${best.why}` : best.why}${
+          ev ? (knew ? '' : guessed ? ' Elegiste a una persona sin haber preguntado quién tenía margen: fue una apuesta.' : ' Sin haber preguntado quién tenía margen, no podías saberlo: la opción prudente era la aceptable.') : ''
+        }`,
+        info: ev ? `${ev.explanation[0].toUpperCase()}${ev.explanation.slice(1)}: lo decía al preguntarle cómo estaba.` : 'El propio mensaje: qué pide, quién está implicado y si hay un dato que verificar.',
+        when: ev ? `${tag}, Explorar: «${qLabel(ev.question)}», antes de llegar a Apoyar.` : `${tag}, fase Apoyar.`,
       });
       return {
         id: `isl${d}-support-${req.id}`,
@@ -205,7 +217,7 @@ export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[]): Isl
         max: P(QUALITY_T.best),
         earned: P(QUALITY_T[q]),
         why: chosen ? (q === 'best' ? 'Mejor respuesta.' : `${chosen.why} Mejor: «${best.text}»`) : `Sin responder. Mejor: «${best.text}»`,
-        errorType: q === 'best' ? undefined : chosen ? `sfl-support-${q}` : 'sfl-blank',
+        errorType: q === 'best' ? undefined : guessed ? 'sfl-support-guess' : chosen ? `sfl-support-${q}` : 'sfl-blank',
       };
     });
     const firstOk = a?.supportOrder[0] === urgent.id;
@@ -303,7 +315,7 @@ export function islandPatterns(sc: IslandScenario, answers: IslandDayAnswer[], g
   sc.days.forEach((day, d) => {
     const a = answers[d];
     if (!a) return;
-    const keyQs = new Set(day.keyFacts.map((f) => f.question));
+    const keyQs = new Set(dayKeyQuestions(day));
     const missed = [...keyQs].filter((q) => !a.asked.includes(q));
     const irr = a.asked.filter((q) => !keyQs.has(q));
     if (missed.length && irr.length)
@@ -339,14 +351,20 @@ export function islandPatterns(sc: IslandScenario, answers: IslandDayAnswer[], g
       if (!evidenceFor(day, a, r.id, day.optimum[r.id], a.assign[r.id]) && day.keyFacts.some((f) => f.fact.endsWith(`:${r.id}`)))
         lucky.push(`Día ${d + 1}: moviste bien a ${r.name} sin haber preguntado lo que lo justificaba.`);
     }
+    for (const req of day.support) {
+      const opt = a.support[req.id] != null ? req.options[a.support[req.id]] : undefined;
+      if (req.evidence && opt?.quality === 'best' && !a.asked.includes(req.evidence.question))
+        lucky.push(`Día ${d + 1}: en «${req.title}» acertaste a quién pasar el trabajo sin haber preguntado quién tenía margen.`);
+    }
   });
-  if (intuition.length || lucky.length)
+  const supportGuesses = g.rubric.parts.flatMap((p) => p.items).filter((i) => i.errorType === 'sfl-support-guess');
+  if (intuition.length || lucky.length || supportGuesses.length)
     out.push({
       id: 'sfl-intuition',
-      title: 'Asignaciones por intuición, no por evidencia',
-      detail: 'Cambiaste o mantuviste a alguien en una estación sin la información que lo justificaba.',
-      evidence: [...intuition.map((i) => `${i.label}: ${i.why}`), ...lucky],
-      severity: intuition.length ? 'alta' : 'media',
+      title: 'Decisiones por intuición, no por evidencia',
+      detail: 'Pusiste a alguien en una estación o le pasaste trabajo sin la información que lo justificaba.',
+      evidence: [...intuition.map((i) => `${i.label}: ${i.why}`), ...supportGuesses.map((i) => `${i.label}: elegiste a quién pasar el trabajo sin saber quién tenía margen.`), ...lucky],
+      severity: intuition.length || supportGuesses.length ? 'alta' : 'media',
     });
   const guesses = g.rubric.parts.flatMap((p) => p.items).filter((i) => i.errorType === 'sfl-reflect-guess');
   if (guesses.length >= 2)
@@ -415,6 +433,8 @@ export const ISLAND_TIPS: Record<string, (n: number) => string> = {
   'sfl-reason': () => 'Elige el motivo que de verdad causó el cambio: si fue algo de la persona, «situación o preferencia personal»; si fue la estación, «necesidad de la estación».',
   'sfl-support-poor': (n) => `Diste ${n} malas respuestas de apoyo. Descarta siempre las opciones que evitan el problema o ignoran a la persona.`,
   'sfl-support-ok': (n) => `En ${n} peticiones elegiste una opción aceptable pero no la mejor. La mejor suele resolver la causa y dejar un seguimiento, no solo aliviar el síntoma.`,
+  'sfl-support-guess': (n) =>
+    `En ${n} peticiones pasaste trabajo a alguien sin saber si tenía margen. Si una petición puede acabar en «pásaselo a alguien», pregunta en Explorar cómo está la gente; si no lo sabes, elige la opción que no carga a nadie.`,
   'sfl-urgent': () => 'Abre primero la petición marcada como urgente: el orden puntúa.',
   'sfl-reflect': () => 'En Reflexionar usa lo que te dijeron ese mismo día: si alguien dijo que iba justo, su ánimo o su carga no son «alto».',
   'sfl-reflect-guess': () => 'Si no tienes pruebas sobre alguien, responde «No lo sé»: vale más que un nivel equivocado.',

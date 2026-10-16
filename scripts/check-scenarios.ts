@@ -7,6 +7,23 @@ import { generateIsland, validateIsland } from '../src/sfl/island';
 import { generateClassic, validateClassic } from '../src/sfl/classic';
 
 const N = Number(process.argv[2] ?? 50);
+/** Que la longitud no delate la mejor opción: ni siempre la más larga, ni la más corta, ni (con 3 opciones) la intermedia. */
+const MAX_EXTREME = 0.45;
+const MAX_MIDDLE_OF_3 = 0.55;
+const lengthRank: Record<string, { longest: number; shortest: number; middle3: number; n3: number; total: number }> = {};
+const tally = (key: string, options: { text: string; quality: string }[]) => {
+  const r = (lengthRank[key] ??= { longest: 0, shortest: 0, middle3: 0, n3: 0, total: 0 });
+  const best = options.find((o) => o.quality === 'best')!;
+  const longest = options.every((o) => o === best || o.text.length < best.text.length);
+  const shortest = options.every((o) => o === best || o.text.length > best.text.length);
+  r.total++;
+  if (longest) r.longest++;
+  if (shortest) r.shortest++;
+  if (options.length === 3) {
+    r.n3++;
+    if (!longest && !shortest) r.middle3++;
+  }
+};
 let failures = 0;
 let rr = 0;
 let sw = 0;
@@ -35,7 +52,10 @@ for (const lang of ['es', 'en'] as const)
         const ii = validateIsland(sc);
         // El mismo escenario en el otro idioma debe tener las mismas decisiones correctas
         const other = generateIsland(seed, diff, lang === 'es' ? 'en' : 'es');
-        const same = sc.days.every((d, k) => JSON.stringify([d.optimum, d.keyFacts.map((f) => f.fact)]) === JSON.stringify([other.days[k].optimum, other.days[k].keyFacts.map((f) => f.fact)]));
+        const sig = (x: typeof sc) =>
+          JSON.stringify(x.days.map((d) => [d.optimum, d.keyFacts.map((f) => f.fact), d.support.map((r) => [r.type, r.from, r.evidence?.who, r.options.map((o) => o.quality)])]));
+        const same = sig(sc) === sig(other);
+        sc.days.forEach((d) => d.support.forEach((r) => tally('SFL Island (peticiones de Apoyar)', r.options)));
         if (!same) ii.push({ code: 'LANG', message: 'El escenario cambia según el idioma.' });
         if (ii.length) {
           failures++;
@@ -49,6 +69,7 @@ for (const lang of ['es', 'en'] as const)
       try {
         const c = generateClassic(seed, diff, lang);
         const ci = validateClassic(c);
+        c.decisions.forEach((d) => Object.values(d.variants).forEach((v) => tally('SFL Classic (decisiones)', v.options)));
         const other = generateClassic(seed, diff, lang === 'es' ? 'en' : 'es');
         if (other.correctRanking.join() !== c.correctRanking.join() || other.results.join() !== c.results.join()) ci.push({ code: 'LANG', message: 'El escenario cambia según el idioma.' });
         if (ci.length) {
@@ -61,5 +82,15 @@ for (const lang of ['es', 'en'] as const)
       }
       cl++;
     }
+for (const [label, r] of Object.entries(lengthRank)) {
+  const pct = (x: number, t: number) => (t ? Math.round((100 * x) / t) : 0);
+  console.log(
+    `${label}: la mejor opción es la más larga en el ${pct(r.longest, r.total)} %, la más corta en el ${pct(r.shortest, r.total)} % y la intermedia (con 3 opciones) en el ${pct(r.middle3, r.n3)} %`,
+  );
+  if (r.longest / r.total > MAX_EXTREME || r.shortest / r.total > MAX_EXTREME || (r.n3 && r.middle3 / r.n3 > MAX_MIDDLE_OF_3)) {
+    failures++;
+    console.log(`  ✗ La longitud de las opciones delata la mejor respuesta en ${label}.`);
+  }
+}
 console.log(`Redrock: ${rr} escenarios · Sea Wolf: ${sw} escenarios (${sw * 3} zonas) · SFL Island: ${isl} escenarios (${isl * 3} días) · SFL Classic: ${cl} escenarios · ${N} por módulo, dificultad e idioma · fallos del validador: ${failures}`);
 process.exit(failures ? 1 : 0);

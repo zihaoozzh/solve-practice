@@ -12,6 +12,7 @@ Investigación hecha el 16 de octubre de 2026 para preparar la prueba del 24 de 
 - Reddit (r/consulting, r/MBA, r/McKinseyAndCompany) no se pudo leer. El 16-oct-2026 se volvió a intentar por tres vías: lectura directa, buscador filtrado por dominio y navegador real. Las tres están bloqueadas para Reddit, y el buscador general no devuelve fragmentos de hilos. Los relatos de candidatos vienen sobre todo de PrepLounge, de un foro de CaseBasix y de un fragmento de Glassdoor. Ver sección 8.
 - Las páginas de McKinsey se leyeron en un navegador real. El subtítulo del vídeo oficial (septiembre de 2025) se descargó de su reproductor. Es la fuente oficial más detallada que existe sobre las mecánicas.
 - **SFL (sección 9):** se descartaron, sin enlazarlas, varias páginas y vídeos de webs de preparación que reproducen contenido concreto de la prueba real: nombres de investigadores, especialidades y temas exactos de las estaciones, nombres de misiones y recorridos pregunta a pregunta. Solo se usan fuentes que describen mecánicas.
+- **Segunda pasada de verificación del SFL (16-oct-2026, tarde):** solo funcionó el buscador; la lectura directa de páginas y Reddit estaban bloqueadas. Lo nuevo sale de fragmentos y resúmenes del buscador, no de páginas leídas enteras, y no se encontró ningún relato de candidatos fechado entre el 1 y el 16 de octubre. Se marca con *(verificación 16-oct)*. También se descartaron, sin enlazarlos, resultados que daban las especialidades reales de los investigadores, los temas de las estaciones y los temas de los escenarios del clásico.
 
 ---
 
@@ -440,9 +441,10 @@ Lo no confirmado específico del SFL está en **9.7**.
   - Lo que hay que descubrir con Explore es lo que prefieren, cómo se sienten, dónde creen que aportan más y, según AceTheSolve, habilidades o certificaciones que no se deducen del cargo **[Web de preparación]**.
   - Algunas webs reproducen los nombres y especialidades concretos de la prueba real. **Aquí se omiten a propósito.** Para el simulador, inventa perfiles propios.
 - **4 estaciones de trabajo** con una descripción de qué trabajo hay que hacer. Sus necesidades pueden cambiar de un día a otro **[Web de preparación]** ([SolveGamesGuide](https://solvegamesguide.com/mckinsey-lab-leader)).
-  - **Capacidad:** hasta 2 investigadores por estación, y una estación puede quedar vacía. Lo dice Road to Offer, pero lo etiqueta como regla de su práctica **[Web de preparación]**.
+  - **Capacidad:** hasta 2 investigadores por estación, y una estación puede quedar vacía. Lo dice Road to Offer, pero lo etiqueta como regla de su práctica **[Web de preparación]**. *(Verificación 16-oct)* [PSG Secrets](https://psgsecrets.com/blog/mckinsey-sustainable-futures-lab/) dice lo mismo, así que ya son dos fuentes, ambas de preparación.
   - **Colocación inicial:** cada estación ocupada empieza con 1 o 2 personas y suele quedar una estación vacía **[Candidatos]** (reconstrucción citada por [Road to Offer](https://www.roadtooffer.com/mckinsey-sfl-island)).
 - **¿Hay mapa o alojamiento?** Ninguna fuente describe un mapa navegable ni un "alojamiento". Lo que describen es una **interfaz de paneles**: equipo a un lado y estaciones al otro, con notas, objetivo del día, reloj, indicador de día y marcas de disponibilidad **[Web de preparación]** ([StrategyCase](https://strategycase.com/mckinsey-solve-behavioral-game/), [Road to Offer](https://www.roadtooffer.com/blog/mckinsey-sfl-new-version-practice)).
+  - *(Verificación 16-oct)* Ninguna fuente nueva habla de alojamiento, vivienda o "lodging". El único "mapa de la isla con 4 estaciones" es el del simulador gratuito de [SolvePrep](https://solveprep.com/mckinsey-solve/simulation/sustainable-future-lab/free), que es su simulador, no la prueba real **[Web de preparación]**.
   - El "banquillo" (bench) solo aparece en AceTheSolve, que lo plantea como sitio donde dejar a alguien sin estación para que recupere energía. **Dudoso**, con una sola fuente.
 - **Atributos numéricos** como energía, moral, peso de cada estación (en %), coste de energía o sensibilidad al tiempo atmosférico: solo los describe [AceTheSolve](https://acethesolve.com/guides/sustainable-futures-lab-2026), y lo hace desde su reconstrucción. **Dudoso.** Ninguna otra fuente ni candidato menciona medidores visibles.
 
@@ -458,6 +460,7 @@ Lo no confirmado específico del SFL está en **9.7**.
   - Road to Offer dice que los candidatos recuerdan las cifras "con menos seguridad" que el resto.
   - StrategyCase no da cifra.
   - Un relato que cita SolveGamesGuide habla de "tres preguntas por día" **[Candidatos]** (indirecto, [SolveGamesGuide blog](https://solvegamesguide.com/blog/mckinsey-solve-95-minute-new-sustainable-futures-lab-format)).
+  - *(Verificación 16-oct)* [PSG Secrets](https://psgsecrets.com/blog/mckinsey-sustainable-futures-lab/) habla de "2–3 Explore Requests al día", sin reparto **[Web de preparación]**.
   - **Las cifras son probables, pero no están confirmadas.**
 - **Quedan menos preguntas que objetivos:** hay 8 posibles (4 personas y 4 estaciones) y no se puede preguntar todo.
   - No todos están disponibles cada día; la interfaz marca quién lo está **[Web de preparación]** ([AceTheSolve](https://acethesolve.com/guides/sustainable-futures-lab-2026), [SolveGamesGuide blog](https://solvegamesguide.com/blog/mckinsey-solve-95-minute-new-sustainable-futures-lab-format)).
@@ -477,6 +480,8 @@ Lo no confirmado específico del SFL está en **9.7**.
 - **Cada movimiento pide un motivo** de una lista cerrada, y el juego registra la justificación **[Web de preparación]**/**[Candidatos]** (reconstrucciones citadas por [Road to Offer](https://www.roadtooffer.com/blog/mckinsey-sfl-new-version-practice)).
   - Road to Offer recoge 5 motivos: preferencia del investigador, encaje de habilidades, avanzar el objetivo del día, necesidad actual de la estación y cobertura de la estación.
   - SolveGamesGuide confirma que hay una lista corta, pero no la detalla.
+  - *(Verificación 16-oct)* [PSG Secrets](https://psgsecrets.com/blog/mckinsey-sustainable-futures-lab/) da **4 motivos fijos**: preferencia del investigador, ayuda al investigador, cobertura de la estación y últimas necesidades de la estación **[Web de preparación]**. Contradice los 5 de Road to Offer.
+  - [Prepmatter](https://prepmatter.com/blog/mckinsey-solve-sustainable-future-lab) confirma que el juego registra el motivo de cada movimiento **[Web de preparación]**.
   - La **lista exacta no está confirmada**.
 - **Al final se confirma la asignación.**
   - AceTheSolve dice que no se puede confirmar una asignación incompleta. **Dudoso.**
@@ -593,6 +598,7 @@ Un **contratiempo el día 2** (tormenta, avería o problema de suministro) con e
   - **No hay confirmación oficial.**
 - **Pausas:** los tutoriales no cuentan tiempo **[Oficial]** (FAQ). Entre juegos se vuelve a un menú de tareas **[Web de preparación]** ([CaseStar](https://www.casestar.io/guides/mckinsey-solve/what-changed-2026)).
   - **Ninguna fuente describe una pausa formal** con cronómetro entre módulos.
+  - *(Verificación 16-oct)* Algunas webs genéricas (IGotAnOffer, Management Consulted, sin fecha concreta) dicen que el reloj se para en las transiciones o que puedes descansar entre juegos; otras, que no hay botón de pausa. Ninguna es oficial ni habla del formato de 95 min **[Web de preparación]**.
   - Los 20 min extra de las invitaciones de 95 min cubren instrucciones y comprobación técnica **[Candidatos]** (texto de invitación citado en [PrepLounge](https://www.preplounge.com/consulting-forum/mckinsey-solve-game-timing-inquiry-25242)).
   - En el Island, el reloj de 30 min empieza al salir del tutorial (ver 9.2.1).
 - **Idiomas:** McKinsey ofrece Solve en inglés, español, portugués y japonés **[Oficial]** (FAQ). **No se ha encontrado ninguna fuente** que diga si el SFL, sobre todo el Island, existe en español. Para el simulador, conviene redactar en español con terminología que se pueda mapear al inglés ("Explore", "Assign", "Support", "Reflect", "Notes").
@@ -605,7 +611,7 @@ Un **contratiempo el día 2** (tormenta, avería o problema de suministro) con e
   - Los "5 rasgos" que se repiten (priorización, decisión con incertidumbre, interpretar información confusa, equilibrar compromisos y eficacia con equipo y stakeholders) son una **interpretación de las webs**, no un dato publicado.
   - Que sea "conductual" es una **etiqueta de las webs** ("behavioral judgment module"). McKinsey no lo describe así.
 - **Island:** **nadie fuera de McKinsey conoce la puntuación** **[Web de preparación]** ([Road to Offer](https://www.roadtooffer.com/blog/mckinsey-sfl-new-version-practice), [CasePracticeFree](https://casepracticefree.com/en/sustainable-futures-lab/)).
-  - Los modelos de las webs son **inventados**. Road to Offer da 100 puntos repartidos así: onboarding 10, Explore 15, Assign 30, Support 30, Reflect 15. SolveGamesGuide da Entrega 50 %, Priorización 25 %, Trabajo en equipo 25 %. AceTheSolve da 6 criterios: producción, encaje con el plan, calidad del apoyo, coherencia y cumplimiento, uso de la información y calibración del Reflect.
+  - Los modelos de las webs son **inventados**. Road to Offer da 100 puntos repartidos así: onboarding 10, Explore 15, Assign 30, Support 30, Reflect 15. SolveGamesGuide da Entrega 50 %, Priorización 25 %, Trabajo en equipo 25 %. AceTheSolve da 6 criterios: producción, encaje con el plan, calidad del apoyo, coherencia y cumplimiento, uso de la información y calibración del Reflect. *(Verificación 16-oct)* [Prepmatter](https://prepmatter.com/blog/mckinsey-solve-sustainable-future-lab) da 4: priorización de la información, asignación de recursos, resolución adaptativa y juicio sobre personas.
   - Lo único que comparten es que valoran preguntar lo que cambia decisiones, asignar según la información obtenida, responder a Support sin extremos y que el Reflect esté calibrado con lo observado.
 - **Puntuación global:** puntuación bruta y decil (ver 5.2). No se sabe cuánto pesa el SFL ni si el Island en piloto cuenta. Los coaches creen que sí cuenta **[Web de preparación]** ([PrepLounge, 18–21-sep-2026](https://www.preplounge.com/consulting-forum/recently-did-mck-solve-but-got-a-newer-version-of-sfl-would-this-affect-my-score-if-its-still-in-trial-phase-25340)).
 
@@ -665,7 +671,9 @@ Todo es **[Web de preparación]** salvo donde se indica, y está parafraseado.
 | Notas entre días (Island) | Se borran cada noche (Road to Offer, AceTheSolve; candidatos que perdieron información) | Persisten los 3 días (SolveGamesGuide) |
 | Preguntas de Explore por día | 3 / 3 / 2 (AceTheSolve, SolveGamesGuide, práctica de Road to Offer) | "Tres por día" (relato citado por SolveGamesGuide). Road to Offer dice que los candidatos no lo recuerdan con seguridad |
 | Opciones en Support | 2–4, a veces 5 (Road to Offer) | Siempre 3 (AceTheSolve) |
-| Motivos de Assign | 5 (Road to Offer) | Lista corta sin detallar (SolveGamesGuide) |
+| Motivos de Assign | 5 (Road to Offer) | 4 fijos (PSG Secrets, verificación 16-oct); lista corta sin detallar (SolveGamesGuide) |
+| ¿Sigue el clásico en las invitaciones de 85 min? | Sí, según la mayoría (9.1) | "Se ha retirado" (Prepmatter, ~5-oct, que en otra página aún describe el de 85 min); PSG Secrets cree que el de 95 min ya es "probablemente el principal". Ninguna lo prueba |
+| Nombre "Lab Leader" | Usado como si fuera el nombre del Island | Es el nombre del simulador de SolveGamesGuide, no de McKinsey (verificación 16-oct) |
 | Dimensión del Reflect | Cambia cada día (Road to Offer) | Fija: cómo se sienten (AceTheSolve); "neutral, equilibrado, desequilibrado" (relato citado por SolveGamesGuide) |
 | Volver atrás (Island) | Secuencia fija sin vuelta atrás (Road to Offer) | Dentro del día "sí" (AceTheSolve, sin detalle) |
 | Medidores de energía y moral, banquillo, pesos por estación, contratiempo del día 2, promesas | Solo AceTheSolve | Nadie más lo menciona. Se tratan como **dudosos** |
@@ -688,6 +696,14 @@ Todo es **[Web de preparación]** salvo donde se indica, y está parafraseado.
 - Disponibilidad del SFL en español.
 - Si el orden de los módulos es siempre fijo.
 - **Si una invitación de 95 min garantiza el Island.**
+
+### 9.8 Cómo traslada esto el simulador (decisiones de diseño, no datos de la prueba)
+Estas decisiones son del simulador. Ninguna está confirmada como mecánica de la prueba real:
+- **Perfiles visibles:** cada investigador muestra su especialidad (fortaleza), una segunda habilidad y un punto débil. Los candidatos dicen que se ve el nombre y el cargo (9.2.2). Las habilidades extra se muestran para que la asignación se pueda razonar; lo que hay que descubrir en Explorar son los cambios del día (preferencias, impedimentos, necesidades nuevas de una estación y sobrecargas) y el estado de cada persona.
+- **Una petición de Apoyar al día depende de lo explorado:** solo una persona tiene margen, y solo se sabe preguntándole cómo está. Se inspira en que las peticiones están conectadas entre sí (9.2.6) y en que las webs valoran usar la información obtenida (9.5). Sin la información, la opción prudente vale una puntuación parcial.
+- **Presupuesto justo:** en Difícil, las preguntas clave ocupan todo el presupuesto; en Normal, todo menos una. Se usa el reparto 3/3/2 (9.2.4), configurable en `ISLAND_CONFIG`.
+- **La longitud no delata la respuesta:** en el Island y en el Classic, la mejor opción es la más larga, la más corta o la intermedia más o menos un tercio de las veces cada una. Así no se aprende un truco que en la prueba real no sirve.
+- **Pausa entre pruebas:** como nadie confirma una pausa con cronómetro (9.4), la pantalla intermedia no tiene tiempo y el tiempo que sobra de una prueba no pasa a la siguiente.
 
 ---
 
@@ -742,3 +758,6 @@ Todo es **[Web de preparación]** salvo donde se indica, y está parafraseado.
 | https://solvegamesguide.com/mckinsey-lab-leader | Web de preparación | Sep-2026 | Island ("Lab Leader"): 3/3/2 preguntas, tablero reorganizado cada mañana, notas que persisten (contradicción), su modelo de puntuación (no oficial) |
 | https://casepracticefree.com/en/sustainable-futures-lab/ | Web de preparación | Sin fecha | Island de 30 min sin cálculos; no hay clave de respuestas oficial |
 | https://www.youtube.com/watch?v=mOEAkyim95Q | Web de preparación (vídeo, solo descripción y capítulos) | 14-oct-2026 | Estructura del Island: 4 personas, 4 estaciones, 3 días, 4 fases |
+| https://psgsecrets.com/blog/mckinsey-sustainable-futures-lab/ | Web de preparación (solo fragmento del buscador) | Fecha confusa: dice 11-abr-2026, pero habla de hechos de finales de agosto | 4 motivos de Assign (contradicción), capacidad de 2 por estación, "2–3 Explore Requests al día", reloj único sin pausa, tutorial sin tiempo |
+| https://prepmatter.com/blog/mckinsey-solve-sustainable-future-lab | Web de preparación (solo fragmento del buscador) | ~5-oct-2026 | "El formato de 13 preguntas se ha retirado" (contradicción), Support con dilemas y orden, motivo registrado, su modelo de 4 puntuaciones (inventado) |
+| https://solveprep.com/mckinsey-solve/simulation/sustainable-future-lab/free | Web de preparación | 2026 | Su simulador usa un mapa de la isla con 4 estaciones (no es la prueba real) |

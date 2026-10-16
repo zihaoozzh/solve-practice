@@ -44,8 +44,9 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
   const dayStart = useRef(Date.now());
   const stepStart = useRef(Date.now());
   const finished = useRef(false);
-  const state = useRef({ cur, done, step });
-  state.current = { cur, done, step };
+  const touched = useRef(new Set<string>());
+  const state = useRef({ cur, done, step, dayIdx });
+  state.current = { cur, done, step, dayIdx };
 
   const finishAll = (answers: IslandDayAnswer[], timedOut: boolean) => {
     if (finished.current) return;
@@ -57,7 +58,9 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
     const s = state.current;
     const answers = s.done.slice();
     // La asignación inicial (por cargos) solo cuenta si llegaste a confirmarla o a tocarla
-    if (answers.length < sc.days.length) answers.push({ ...s.cur, assign: s.step === 'explore' ? {} : s.cur.assign, timeSec: (Date.now() - dayStart.current) / 1000 });
+    const touchedToday = sc.researchers.some((r) => touched.current.has(`${s.dayIdx}-${r.id}`));
+    const counts = s.step !== 'explore' && (s.step !== 'assign' || touchedToday);
+    if (answers.length < sc.days.length) answers.push({ ...s.cur, assign: counts ? s.cur.assign : {}, timeSec: (Date.now() - dayStart.current) / 1000 });
     while (answers.length < sc.days.length) answers.push({ ...emptyIslandDay(sc, answers.length), assign: {} });
     finishAll(answers, true);
   });
@@ -93,7 +96,6 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
   const bijective = sc.researchers.every((r) => cur.assign[r.id]) && sc.stations.every((s) => counts.get(s.id) === 1);
   const movedByYou = sc.researchers.filter((r) => cur.assign[r.id] && cur.assign[r.id] !== day.baseline[r.id]);
   const reasonsDone = movedByYou.every((r) => cur.reasons[r.id]);
-  const touched = useRef(new Set<string>());
   const setAssign = (rid: string, sid: string) => {
     const prev = cur.assign[rid];
     if (prev === sid) return;
@@ -234,8 +236,8 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
                 {!exam && (
                   <p className="hint">
                     {t(
-                      'Cada persona o estación responde como mucho a una pregunta al día. Pregunta por lo que puede cambiar tus decisiones de hoy.',
-                      'Each person or station answers at most one question per day. Ask about what could change today’s decisions.',
+                      'Cada persona o estación responde como mucho a una pregunta al día. Pregunta por lo que puede cambiar tus decisiones de hoy: dónde trabaja cada uno y, en Apoyar, a quién se le puede pasar trabajo.',
+                      'Each person or station answers at most one question per day. Ask about what could change today’s decisions: where each person works and, in Support, who can take on more work.',
                     )}
                   </p>
                 )}
@@ -490,6 +492,17 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
             <div key={r.id} className="team-card" data-track={`profile:${r.id}`}>
               <div>
                 <strong>{r.name}</strong> <span className="muted small">{r.title}</span>
+              </div>
+              <div className="small profile-line">
+                <span className="good-text">
+                  {t('Fortaleza', 'Strength')}: {skillLabel(sc.lang, r.skill1)}
+                </span>
+                {' · '}
+                {t('También', 'Also')}: {skillLabel(sc.lang, r.skill2)}
+                {' · '}
+                <span className="warn-text">
+                  {t('Punto débil', 'Weakness')}: {skillLabel(sc.lang, r.weak)}
+                </span>
               </div>
               <div className="skill-bars">
                 {SKILLS.map((s) => (
