@@ -30,10 +30,22 @@ const MODES: { key: Mode; title: string; minutes: number; desc: string }[] = [
     desc: `3 sitios contaminados: clasifica 10 microbios, completa el pool en 4 rondas de «elige 1 de 3» y elige un tratamiento de 3 (≈${TIMING.seawolfZoneGuideMin[0]} min por sitio).`,
   },
   {
+    key: 'sfl-island',
+    title: 'SFL Island',
+    minutes: min(TIMING.sflIslandSec),
+    desc: '3 días dirigiendo a 4 investigadores en 4 estaciones: pocas preguntas al día, asignaciones con motivo, peticiones de apoyo y valoración del equipo.',
+  },
+  {
     key: 'full',
-    title: 'Simulación completa',
+    title: 'Simulación 65 min',
     minutes: min(TIMING.redrockSec + TIMING.seawolfSec),
     desc: `Redrock (${min(TIMING.redrockSec)} min) seguido de Sea Wolf (${min(TIMING.seawolfSec)} min), con una corrección conjunta al final.`,
+  },
+  {
+    key: 'full95',
+    title: 'Simulación 95 min',
+    minutes: min(TIMING.redrockSec + TIMING.seawolfSec + TIMING.sflIslandSec),
+    desc: `La invitación de «aprox. 95 min»: Redrock (${min(TIMING.redrockSec)}) → Sea Wolf (${min(TIMING.seawolfSec)}) → SFL Island (${min(TIMING.sflIslandSec)}), volviendo al menú entre juegos y con corrección conjunta.`,
   },
 ];
 
@@ -125,7 +137,7 @@ export function Home({ initial, onStart, onStats }: { initial: RunConfig; onStar
           <input id="seed" className="text-input" value={seed} placeholder="vacía = escenario nuevo" onChange={(e) => setSeed(e.target.value.trim().slice(0, 24))} />
           <span className="muted small">La misma semilla y dificultad repiten exactamente el escenario (en cualquier idioma).</span>
         </div>
-        {mode !== 'redrock' && !exam && (
+        {(mode === 'seawolf' || mode === 'full' || mode === 'full95') && !exam && (
           <div className="config-row">
             <span className="config-label">Sea Wolf</span>
             <label className="switch">

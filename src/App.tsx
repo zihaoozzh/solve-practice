@@ -10,21 +10,37 @@ import { randomSeed } from './lib/rng';
 import { addHistory, clearHistory, exportHistory, HistoryEntry, loadHistory, Mode, PhaseStat, Source } from './lib/history';
 import { durationSec } from './config';
 import { recorder, SessionLog } from './lib/recorder';
-import { buildAnalysis, FullAnalysis } from './analysis';
+import { buildAnalysis, ExtraGame, FullAnalysis } from './analysis';
+import { IslandRun } from './screens/IslandRun';
+import { SflReview } from './screens/SflReview';
+import { generateIsland, IslandDayAnswer, IslandScenario } from './sfl/island';
+import { gradeIsland, IslandDecision, islandContext, islandPatterns, islandTimes } from './sfl/islandGrade';
 
-type Module = 'redrock' | 'seawolf';
+type Module = 'redrock' | 'seawolf' | 'sfl-island';
+
+interface IslandRunResult {
+  scenario: IslandScenario;
+  answers: IslandDayAnswer[];
+  timedOut: boolean;
+}
+
+interface Collected {
+  redrock?: RedrockRunResult;
+  seawolf?: SeaWolfRunResult;
+  island?: IslandRunResult;
+}
 type Screen = 'home' | 'stats' | 'run' | 'interlude' | 'results';
 
 const PLAN: Record<Mode, Module[]> = {
   redrock: ['redrock'],
   seawolf: ['seawolf'],
   full: ['redrock', 'seawolf'],
-  full95: ['redrock', 'seawolf'],
-  'sfl-island': [],
+  full95: ['redrock', 'seawolf', 'sfl-island'],
+  'sfl-island': ['sfl-island'],
   'sfl-classic': [],
 };
 
-const MODULE_LABEL: Record<Module, string> = { redrock: 'Redrock Study', seawolf: 'Sea Wolf' };
+const MODULE_LABEL: Record<Module, string> = { redrock: 'Redrock Study', seawolf: 'Sea Wolf', 'sfl-island': 'SFL Island' };
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -33,6 +49,8 @@ export default function App() {
   const [step, setStep] = useState(0);
   const [redrock, setRedrock] = useState<RedrockRunResult | undefined>();
   const [seawolf, setSeawolf] = useState<SeaWolfRunResult | undefined>();
+  const [island, setIsland] = useState<IslandRunResult | undefined>();
+  const [islandDecisions, setIslandDecisions] = useState<IslandDecision[]>([]);
   const [stats, setStats] = useState<{ entries: HistoryEntry[]; source: Source; file?: string } | null>(null);
   const [savedTo, setSavedTo] = useState<Source | null>(null);
   const [analysis, setAnalysis] = useState<FullAnalysis | undefined>();
@@ -45,6 +63,7 @@ export default function App() {
 
   const rrScenario = useMemo(() => (config.seed && plan.includes('redrock') ? generateRedrock(config.seed, config.difficulty, config.lang) : null), [config, runId]);
   const swScenario = useMemo(() => (config.seed && plan.includes('seawolf') ? generateSeaWolf(config.seed, config.difficulty, config.lang) : null), [config, runId]);
+  const islScenario = useMemo(() => (config.seed && plan.includes('sfl-island') ? generateIsland(config.seed, config.difficulty, config.lang) : null), [config, runId]);
 
   const inRun = screen === 'run';
   useEffect(() => {
@@ -67,6 +86,8 @@ export default function App() {
     setConfig({ ...c, seed });
     setRedrock(undefined);
     setSeawolf(undefined);
+    setIsland(undefined);
+    setIslandDecisions([]);
     setSavedTo(null);
     setAnalysis(undefined);
     setLog(null);
@@ -83,22 +104,34 @@ export default function App() {
   };
 
   /** Pasa a la siguiente prueba del plan o termina la sesión. */
-  const next = (rr?: RedrockRunResult, sw?: SeaWolfRunResult) => {
+  const next = (got: Collected) => {
     if (step + 1 < plan.length) {
       recorder.phase('pausa');
       setStep(step + 1);
       go('interlude');
       return;
     }
-    void finishAll(rr ?? redrock, sw ?? seawolf);
+    void finishAll({ redrock, seawolf, island, ...got });
   };
 
-  const finishAll = async (rr?: RedrockRunResult, sw?: SeaWolfRunResult) => {
+  const finishAll = async ({ redrock: rr, seawolf: sw, island: isl }: Collected) => {
     const { log: sessionLog, savedToFile } = await recorder.finish();
     const prev = (await loadHistory()).entries.filter((e) => e.mode === config.mode);
+    const extra: ExtraGame[] = [];
+    let islGrade: ReturnType<typeof gradeIsland> | null = null;
+    if (isl) {
+      islGrade = gradeIsland(isl.scenario, isl.answers);
+      extra.push({
+        rubric: islGrade.rubric,
+        times: islandTimes(isl.answers),
+        ...islandContext(isl.scenario, islGrade),
+        patterns: islandPatterns(isl.scenario, isl.answers, islGrade),
+      });
+    }
     const a = buildAnalysis({
       redrock: rr && { scenario: rr.scenario, answers: rr.answers, times: rr.times },
       seawolf: sw && { scenario: sw.scenario, answers: sw.answers },
+      extra,
       log: sessionLog,
     });
     const phases: PhaseStat[] = [];
@@ -121,12 +154,21 @@ export default function App() {
         phases.push({ key: `zona-${i + 1}`, name: `Sitio ${i + 1}`, timeSec: sw.answers[i].timeSec, score: Math.round(earned), correct: earned, total: 100 });
       });
     }
+    if (isl && islGrade) {
+      isl.answers.forEach((ans, d) => {
+        const ps = islGrade!.rubric.parts.filter((p) => p.key.startsWith(`isl${d}-`));
+        const earned = Math.round(ps.reduce((s, p) => s + p.earned, 0) * 10) / 10;
+        phases.push({ key: `sfl-dia-${d + 1}`, name: `SFL día ${d + 1}`, timeSec: ans.timeSec, score: Math.round(earned), correct: earned, total: 100 });
+      });
+    }
     // Partes agregadas por tipo (Sea Wolf suma los 3 sitios) para la evolución
     const parts: NonNullable<HistoryEntry['parts']> = [];
     for (const g of a.games)
       for (const p of g.parts) {
-        const key = g.game === 'seawolf' ? `seawolf-${p.key.split('-')[1]}` : `${g.game}-${p.key}`;
-        const label = g.game === 'seawolf' ? `Sea Wolf · ${p.label.split(' · ')[1]}` : `${g.label} · ${p.label}`;
+        // Sea Wolf y SFL Island suman sus sitios o días por tipo de parte
+        const grouped = g.game === 'seawolf' || g.game === 'sfl-island';
+        const key = grouped ? `${g.game}-${p.key.split('-')[1]}` : `${g.game}-${p.key}`;
+        const label = grouped ? `${g.label} · ${p.label.split(' · ')[1]}` : `${g.label} · ${p.label}`;
         const cur = parts.find((x) => x.key === key);
         if (cur) {
           cur.earned = Math.round((cur.earned + p.earned) * 10) / 10;
@@ -143,7 +185,7 @@ export default function App() {
         detail.caseTypes[c.type] = cur;
       }
     }
-    if (rr?.timedOut || sw?.timedOut) detail.timedOut = true;
+    if (rr?.timedOut || sw?.timedOut || isl?.timedOut) detail.timedOut = true;
     const entry: HistoryEntry = {
       id: `${Date.now()}`,
       date: new Date().toISOString(),
@@ -161,6 +203,7 @@ export default function App() {
       detail,
     };
     setAnalysis(a);
+    setIslandDecisions(islGrade?.decisions ?? []);
     setLog(sessionLog);
     setSessionSaved(savedToFile);
     setPrevious(prev);
@@ -196,7 +239,7 @@ export default function App() {
           onFinish={(answers, times, timedOut) => {
             const res = { scenario: rrScenario, answers, times, timedOut };
             setRedrock(res);
-            next(res, undefined);
+            next({ redrock: res });
           }}
         />
       )}
@@ -212,7 +255,22 @@ export default function App() {
           onFinish={(answers, aidsUsed, timedOut) => {
             const res = { scenario: swScenario, answers, aidsUsed, timedOut };
             setSeawolf(res);
-            next(undefined, res);
+            next({ seawolf: res });
+          }}
+        />
+      )}
+
+      {screen === 'run' && current === 'sfl-island' && islScenario && (
+        <IslandRun
+          key={`isl-${runId}`}
+          scenario={islScenario}
+          durationSec={durationSec('sfl-island')}
+          exam={config.exam}
+          label={plan.length > 1 ? `Parte ${step + 1}: SFL Island` : undefined}
+          onFinish={(answers, timedOut) => {
+            const res = { scenario: islScenario, answers, timedOut };
+            setIsland(res);
+            next({ island: res });
           }}
         />
       )}
@@ -243,6 +301,7 @@ export default function App() {
           log={log}
           sessionSaved={sessionSaved}
           previous={previous}
+          extraReview={island && islandDecisions.length > 0 ? <SflReview title="SFL Island" decisions={islandDecisions} days={island.scenario.days.length} /> : undefined}
           onHome={() => go('home')}
           onStats={openStats}
           onRepeat={() => start(config)}

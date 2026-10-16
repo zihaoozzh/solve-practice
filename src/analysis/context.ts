@@ -18,7 +18,7 @@ export function phaseLabel(name: string): string {
   const parts = name.split('-');
   if (parts[0] === 'redrock') return `Redrock · ${PHASES_ES[parts[1]] ?? parts[1]}`;
   if (parts[0] === 'seawolf') return `Sea Wolf · Sitio ${parts[1]} · ${PHASES_ES[parts[2]] ?? parts[2]}`;
-  if (parts[0] === 'sfl') return `SFL ${parts[1] === 'island' ? 'Island' : 'Classic'} · ${parts.slice(2).map((x) => PHASES_ES[x] ?? x).join(' · ')}`;
+  if (parts[0] === 'sfl') return `SFL ${parts[1] === 'island' ? 'Island' : 'Classic'} · ${parts.slice(2).map((x) => (/^\d+$/.test(x) ? `${parts[1] === 'island' ? 'Día' : 'Decisión'} ${x}` : (PHASES_ES[x] ?? x))).join(' · ')}`;
   if (name === 'pausa') return 'Pausa entre pruebas';
   return name;
 }
@@ -39,6 +39,8 @@ const PHASES_ES: Record<string, string> = {
   assign: 'Asignar',
   support: 'Apoyar',
   reflect: 'Reflexionar',
+  feedback: 'Resumen del día',
+  scale: 'Escalar',
   onboarding: 'Presentación',
   briefing: 'Briefing',
   ranking: 'Ranking',

@@ -52,8 +52,8 @@ export interface GameRubric {
 
 // ---------------------------------------------------------------- utilidades en décimas
 
-const T = (points: number) => Math.round(points * 10);
-const P = (tenths: number) => tenths / 10;
+export const T = (points: number) => Math.round(points * 10);
+export const P = (tenths: number) => tenths / 10;
 
 /** Reparte `total` (entero) entre `n` partes enteras que suman exactamente `total`. */
 export function splitEven(total: number, n: number): number[] {
@@ -75,13 +75,13 @@ export function apportion(total: number, weights: number[]): number[] {
   return out;
 }
 
-function part(key: string, label: string, rule: string, items: RubricItem[]): RubricPart {
+export function part(key: string, label: string, rule: string, items: RubricItem[]): RubricPart {
   const max = P(items.reduce((s, i) => s + T(i.max), 0));
   const earned = P(items.reduce((s, i) => s + T(i.earned), 0));
   return { key, label, rule, items, max, earned };
 }
 
-function game(g: GameKey, label: string, parts: RubricPart[]): GameRubric {
+export function game(g: GameKey, label: string, parts: RubricPart[]): GameRubric {
   return {
     game: g,
     label,
@@ -378,4 +378,14 @@ export const ERROR_LABELS: Record<string, string> = {
   'sw-treat-range': 'Sea Wolf: media fuera de rango',
   'sw-treat-required': 'Sea Wolf: falta el rasgo deseado',
   'sw-treat-prohibited': 'Sea Wolf: rasgo no deseado en el tratamiento',
+  'sfl-explore-missed': 'SFL: pregunta clave sin hacer',
+  'sfl-assign': 'SFL: asignación incorrecta',
+  'sfl-assign-intuition': 'SFL: asignación sin la información necesaria',
+  'sfl-reason': 'SFL: motivo de la asignación',
+  'sfl-support-ok': 'SFL: respuesta de apoyo aceptable pero no la mejor',
+  'sfl-support-poor': 'SFL: mala respuesta de apoyo',
+  'sfl-urgent': 'SFL: no atender primero lo urgente',
+  'sfl-reflect': 'SFL: reflexión equivocada con información',
+  'sfl-reflect-guess': 'SFL: reflexión por intuición',
+  'sfl-blank': 'SFL: sin responder',
 };

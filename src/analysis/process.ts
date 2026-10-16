@@ -1,6 +1,7 @@
 // Análisis del proceso a partir del registro: patrones, tiempos, pérdida de soluciones en Sea Wolf y consejos.
 // Funciones puras (testeables): no tocan el DOM.
 
+import { ISLAND_TIPS } from '../sfl/islandGrade';
 import type { RecEvent, SessionLog } from '../lib/recorder';
 import { fmtTime } from '../lib/format';
 import { checkSelection, Microbe, microbeIndex, POOL_START_MAX, SeaWolfScenario, Zone, ZoneAnswer } from '../seawolf';
@@ -387,7 +388,7 @@ export function makeTips(games: GameRubric[], patterns: Pattern[]): string[] {
         text = 'En la lectura de gráficos calcula la diferencia de cada tramo entre años consecutivos (absoluta o porcentual, según pida) antes de elegir.';
         break;
       default:
-        text = `${ERROR_LABELS[key] ?? key}: ${ex.why ?? ''}`;
+        text = ISLAND_TIPS[key] ? ISLAND_TIPS[key](n) : `${ERROR_LABELS[key] ?? key}: ${ex.why ?? ''}`;
     }
     tips.push({ score: lost, text });
   }
