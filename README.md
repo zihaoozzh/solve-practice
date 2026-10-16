@@ -17,6 +17,19 @@ Abre http://localhost:5173.
 
 Para probar qué pasa cuando se acaba el tiempo, añade `?segundos=N` a la dirección (por ejemplo http://localhost:5173/?segundos=60): cada prueba dura entonces N segundos.
 
+## Trabajar en la nube
+
+El repositorio es privado y no incluye tus datos de práctica: `data/intentos.json` y `data/sesiones/` están en `.gitignore`, y solo se sube `data/.gitkeep` para que exista la carpeta. En una sesión nueva (por ejemplo, Claude Code en la nube):
+
+```bash
+npm install     # dependencias
+npm run dev     # servidor local en http://localhost:5173
+npm test        # tests (Vitest)
+npm run check   # 50 escenarios por módulo, dificultad e idioma: debe dar 0 fallos
+```
+
+La investigación sobre la prueba (fuentes, contradicciones y lo que no está confirmado) está en [`research/solve-2026.md`](research/solve-2026.md); el SFL, en la sección 9. Léela antes de cambiar mecánicas.
+
 ## Comandos
 
 - `npm test`: tests de generadores, validadores, rúbricas y detector de patrones con Vitest.

@@ -1,4 +1,14 @@
+# Dependencias y builds
 node_modules/
 dist/
+build/
+coverage/
 *.tsbuildinfo
-data/
+
+# Datos personales de práctica (intentos y registros de sesión): solo en local
+data/*
+!data/.gitkeep
+
+# Variables de entorno
+.env
+.env.*
