@@ -11,6 +11,7 @@ import {
   la,
   hadEvidence,
   IslandDayAnswer,
+  IslandOnboardingAnswer,
   IslandScenario,
   LEVEL_LABEL,
   REASON_LABEL,
@@ -19,6 +20,8 @@ import {
 } from './island';
 
 export const ISLAND_RULES = {
+  onboarding:
+    'Onboarding (10): se comparan por parejas las 6 relaciones de orden entre las 4 preguntas (unos 1,7 puntos por pareja). No se sabe si la prueba real lo puntúa: aquí cuenta poco y sirve para practicar el criterio «primero lo que cambia decisiones».',
   explore:
     'Explorar (20 por día): los puntos se reparten entre las preguntas clave del día: las que revelan un dato que cambia la mejor asignación y la que dice quién tiene margen para la petición de Apoyar que depende de ello. Una pregunta irrelevante no resta, pero gasta una pregunta que luego falta.',
   assign: 'Asignar (30 por día): 7,5 por cada investigador en la estación de la asignación óptima (la de mayor valor según el objetivo del día).',
@@ -31,12 +34,14 @@ export const ISLAND_RULES = {
 };
 
 const DAY_REF_SEC = 10 * 60;
+/** Referencia de Road to Offer para el onboarding (~3 min), no oficial. */
+const ONBOARDING_REF_SEC = 3 * 60;
 const QUALITY_T = { best: 65, ok: 30, poor: 0 };
 
 export interface IslandDecision {
   id: string;
   day: number;
-  step: 'explore' | 'assign' | 'reason' | 'support' | 'reflect';
+  step: 'onboarding' | 'explore' | 'assign' | 'reason' | 'support' | 'reflect';
   label: string;
   yours: string;
   best: string;
@@ -53,9 +58,41 @@ export interface IslandGrade {
   decisions: IslandDecision[];
 }
 
-export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[]): IslandGrade {
+export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[], onboarding?: IslandOnboardingAnswer): IslandGrade {
   const decisions: IslandDecision[] = [];
   const parts = [];
+  // ---- Onboarding: orden de las 4 preguntas, por parejas
+  const ob = sc.onboarding;
+  const topicQ = (id: string) => `«${ob.topics.find((x) => x.id === id)?.question ?? id}»`;
+  const order = onboarding?.order ?? [];
+  const obPairs: [string, string][] = [];
+  for (let i = 0; i < ob.best.length; i++) for (let j = i + 1; j < ob.best.length; j++) obPairs.push([ob.best[i], ob.best[j]]);
+  const obT = splitEven(100, obPairs.length);
+  const obItems: RubricItem[] = obPairs.map(([x, y], k) => {
+    const ok = order.length > 0 && order.indexOf(x as never) < order.indexOf(y as never);
+    return {
+      id: `isl-onb-${x}-${y}`,
+      label: `Onboarding · ${topicQ(x)} antes que ${topicQ(y)}`,
+      max: P(obT[k]),
+      earned: ok ? P(obT[k]) : 0,
+      why: ok ? 'Orden correcto.' : order.length ? `Al revés: ${topicQ(x)} aporta más para decidir que ${topicQ(y)}.` : 'Sin responder.',
+      errorType: ok ? undefined : order.length ? 'sfl-onboarding' : 'sfl-blank',
+    };
+  });
+  const obOk = order.join() === ob.best.join();
+  decisions.push({
+    id: 'isl-onboarding',
+    day: 1,
+    step: 'onboarding',
+    label: 'Onboarding: orden de las preguntas',
+    yours: order.length ? order.map(topicQ).join(' → ') : 'Sin responder',
+    best: ob.best.map(topicQ).join(' → '),
+    ok: obOk ? true : obItems.some((i) => i.earned > 0) ? 'partial' : false,
+    why: ob.why,
+    info: 'La introducción del proyecto: qué preguntas cambian tus decisiones del día 1 y cuáles son solo contexto.',
+    when: 'Onboarding, antes del día 1 (ya corre el reloj).',
+  });
+  parts.push(part('isl-onboarding', 'Inicio · Onboarding', ISLAND_RULES.onboarding, obItems));
   const rn = (id: string) => sc.researchers.find((r) => r.id === id)?.name ?? id;
   const sn = (id: string | undefined) => (id ? (sc.stations.find((s) => s.id === id)?.name ?? id) : '—');
   const lsn = (id: string | undefined) => (id ? la(sn(id)) : 'ninguna');
@@ -306,8 +343,16 @@ function evidenceFor(day: IslandScenario['days'][number], a: IslandDayAnswer | u
 
 // ---------------------------------------------------------------- patrones del proceso
 
-export function islandPatterns(sc: IslandScenario, answers: IslandDayAnswer[], g: IslandGrade): Pattern[] {
+export function islandPatterns(sc: IslandScenario, answers: IslandDayAnswer[], g: IslandGrade, onboarding?: IslandOnboardingAnswer): Pattern[] {
   const out: Pattern[] = [];
+  if (onboarding && onboarding.timeSec > ONBOARDING_REF_SEC + 60)
+    out.push({
+      id: 'sfl-onboarding-slow',
+      title: 'Onboarding demasiado largo',
+      detail: 'El reloj de 30 minutos ya corre en el onboarding. Lo que gastas aquí te falta el día 3.',
+      evidence: [`Tardaste ${Math.round(onboarding.timeSec)} s; la referencia es de unos ${ONBOARDING_REF_SEC} s.`],
+      severity: 'media',
+    });
   const qLabel = (d: number, qid: string) => sc.days[d].questions.find((q) => q.id === qid)?.label ?? qid;
   // Preguntas gastadas en información irrelevante cuando faltó la clave
   const wasted: string[] = [];
@@ -389,8 +434,11 @@ export function islandPatterns(sc: IslandScenario, answers: IslandDayAnswer[], g
 
 // ---------------------------------------------------------------- integración con el análisis
 
-export function islandTimes(answers: IslandDayAnswer[]): PartTime[] {
-  return answers.map((a, d) => ({ game: 'SFL Island', label: `Día ${d + 1}`, sec: a.timeSec, refSec: DAY_REF_SEC }));
+export function islandTimes(answers: IslandDayAnswer[], onboarding?: IslandOnboardingAnswer): PartTime[] {
+  return [
+    ...(onboarding ? [{ game: 'SFL Island', label: 'Onboarding', sec: onboarding.timeSec, refSec: ONBOARDING_REF_SEC }] : []),
+    ...answers.map((a, d) => ({ game: 'SFL Island', label: `Día ${d + 1}`, sec: a.timeSec, refSec: DAY_REF_SEC })),
+  ];
 }
 
 export function islandContext(sc: IslandScenario, g: IslandGrade) {
@@ -435,6 +483,8 @@ export const ISLAND_TIPS: Record<string, (n: number) => string> = {
   'sfl-support-ok': (n) => `En ${n} peticiones elegiste una opción aceptable pero no la mejor. La mejor suele resolver la causa y dejar un seguimiento, no solo aliviar el síntoma.`,
   'sfl-support-guess': (n) =>
     `En ${n} peticiones pasaste trabajo a alguien sin saber si tenía margen. Si una petición puede acabar en «pásaselo a alguien», pregunta en Explorar cómo está la gente; si no lo sabes, elige la opción que no carga a nadie.`,
+  'sfl-onboarding': () =>
+    'En el onboarding, pide primero lo que cambia tus decisiones (qué hay que conseguir y cómo funciona la jornada) y deja el contexto para el final.',
   'sfl-urgent': () => 'Abre primero la petición marcada como urgente: el orden puntúa.',
   'sfl-reflect': () => 'En Reflexionar usa lo que te dijeron ese mismo día: si alguien dijo que iba justo, su ánimo o su carga no son «alto».',
   'sfl-reflect-guess': () => 'Si no tienes pruebas sobre alguien, responde «No lo sé»: vale más que un nivel equivocado.',
