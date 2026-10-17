@@ -125,7 +125,7 @@ export function Stats({ entries, source, file, onBack, onClear, onExport }: Prop
       <div className="config-row">
         <span className="config-label">Filtrar</span>
         <div className="segmented">
-          {(['all', 'redrock', 'seawolf', 'sfl-island', 'sfl-classic', 'full', 'full95'] as const).map((m) => (
+          {(['all', 'redrock', 'seawolf', 'sfl-island', 'sfl-classic', 'full', 'full85', 'full95'] as const).map((m) => (
             <button key={m} type="button" className={mode === m ? 'selected' : ''} onClick={() => setMode(m)}>
               {m === 'all' ? 'Todos' : MODE_LABEL[m]}
             </button>

@@ -48,6 +48,12 @@ const MODES: { key: Mode; title: string; minutes: number; desc: string }[] = [
     desc: `Redrock (${min(TIMING.redrockSec)} min) seguido de Sea Wolf (${min(TIMING.seawolfSec)} min), con una corrección conjunta al final.`,
   },
   {
+    key: 'full85',
+    title: 'Simulación 85 min',
+    minutes: min(TIMING.redrockSec + TIMING.seawolfSec + TIMING.sflClassicSec),
+    desc: `La invitación de 85 min: Redrock (${min(TIMING.redrockSec)}) → Sea Wolf (${min(TIMING.seawolfSec)}) → SFL Classic (${min(TIMING.sflClassicSec)}), volviendo al menú entre juegos y con corrección conjunta.`,
+  },
+  {
     key: 'full95',
     title: 'Simulación 95 min',
     minutes: min(TIMING.redrockSec + TIMING.seawolfSec + TIMING.sflIslandSec),
@@ -143,7 +149,7 @@ export function Home({ initial, onStart, onStats }: { initial: RunConfig; onStar
           <input id="seed" className="text-input" value={seed} placeholder="vacía = escenario nuevo" onChange={(e) => setSeed(e.target.value.trim().slice(0, 24))} />
           <span className="muted small">La misma semilla y dificultad repiten exactamente el escenario (en cualquier idioma).</span>
         </div>
-        {(mode === 'seawolf' || mode === 'full' || mode === 'full95') && !exam && (
+        {(mode === 'seawolf' || mode === 'full' || mode === 'full85' || mode === 'full95') && !exam && (
           <div className="config-row">
             <span className="config-label">Sea Wolf</span>
             <label className="switch">

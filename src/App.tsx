@@ -45,6 +45,7 @@ const PLAN: Record<Mode, Module[]> = {
   redrock: ['redrock'],
   seawolf: ['seawolf'],
   full: ['redrock', 'seawolf'],
+  full85: ['redrock', 'seawolf', 'sfl-classic'],
   full95: ['redrock', 'seawolf', 'sfl-island'],
   'sfl-island': ['sfl-island'],
   'sfl-classic': ['sfl-classic'],
