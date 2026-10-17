@@ -14,6 +14,7 @@ export interface SflDecisionView {
 }
 
 const STEP_ES: Record<string, string> = {
+  onboarding: 'Onboarding',
   explore: 'Explorar',
   assign: 'Asignar',
   reason: 'Motivos',

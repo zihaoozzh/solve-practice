@@ -103,12 +103,26 @@ export interface DayPlan {
   reflectDimension: 'mood' | 'workload';
 }
 
+export interface OnboardingTopic {
+  id: 'goal' | 'rules' | 'team' | 'context';
+  question: string;
+  answer: string;
+}
+
+/** Onboarding: ordenas 4 preguntas según el orden en que quieres las respuestas y recibes las 4 (research §9.2.3). */
+export interface Onboarding {
+  topics: OnboardingTopic[]; // en el orden en que se presentan (barajado)
+  best: OnboardingTopic['id'][];
+  why: string;
+}
+
 export interface IslandScenario {
   seed: string;
   lang: Lang;
   difficulty: Difficulty;
   island: string;
   mission: string;
+  onboarding: Onboarding;
   researchers: Researcher[];
   stations: Station[];
   days: DayPlan[];
@@ -533,6 +547,7 @@ function tryGenerate(rng: Rng, seed: string, difficulty: Difficulty, lang: Lang)
     seed,
     lang,
     difficulty,
+    onboarding: makeOnboarding(seed, lang, researchers),
     island: t('Isla Calma', 'Calm Isle'),
     mission: t(
       'Eres la persona que coordina la estación de investigación de la Isla Calma durante 3 días. Cada día puedes hacer unas pocas preguntas, decides dónde trabaja cada investigador, respondes a sus peticiones de apoyo y valoras cómo está el equipo.',
@@ -541,6 +556,66 @@ function tryGenerate(rng: Rng, seed: string, difficulty: Difficulty, lang: Lang)
     researchers,
     stations,
     days,
+  };
+}
+
+// ---------------------------------------------------------------- onboarding
+
+/** Orden defendible: qué hay que conseguir → cómo funciona la jornada → quién es el equipo → contexto. */
+export const ONBOARDING_BEST: OnboardingTopic['id'][] = ['goal', 'rules', 'team', 'context'];
+
+function makeOnboarding(seed: string, lang: Lang, researchers: Researcher[]): Onboarding {
+  // Generador aparte: no cambia el resto del escenario de cada semilla
+  const rng = createRng(`sfl-island-onboarding|${seed}`);
+  const t = T(lang);
+  const [q1, q2, q3] = ISLAND_CONFIG.questionsPerDay;
+  const context = rng.pick([
+    {
+      question: t('¿Cómo empezó la estación de investigación?', 'How did the research station start?'),
+      answer: t(
+        'Se fundó hace doce años como observatorio de aves marinas y desde entonces ha ido sumando laboratorios y equipos.',
+        'It was founded twelve years ago as a seabird observatory and has added labs and teams ever since.',
+      ),
+    },
+    {
+      question: t('¿Cómo es la vida en la isla?', 'What is life like on the island?'),
+      answer: t(
+        'Hay un pequeño puerto, un barco de suministros a la semana y un centro de visitantes que solo abre en verano.',
+        'There is a small harbour, one supply boat a week and a visitor centre that only opens in summer.',
+      ),
+    },
+  ]);
+  const topics: OnboardingTopic[] = [
+    {
+      id: 'goal',
+      question: t('¿Qué tiene que conseguir el proyecto?', 'What does the project need to achieve?'),
+      answer: t(
+        'Mantener en marcha las 4 estaciones durante 3 días y cuidar del equipo. Cada día tendrá su propio objetivo: unas veces mandan las personas, otras las estaciones y otras el equilibrio entre ambas.',
+        'Keep the 4 stations running for 3 days while looking after the team. Each day has its own goal: sometimes people come first, sometimes the stations, and sometimes the balance between them.',
+      ),
+    },
+    {
+      id: 'rules',
+      question: t('¿Cómo funciona cada jornada?', 'How does each day work?'),
+      answer: t(
+        `Cada mañana puedes hacer pocas preguntas: ${q1} el primer día, ${q2} el segundo y ${q3} el tercero. Cada persona o estación responde una sola vez al día y las notas se borran por la noche. Después decides dónde trabaja cada uno, atiendes sus peticiones y valoras cómo está el equipo.`,
+        `Each morning you can ask a few questions: ${q1} on day one, ${q2} on day two and ${q3} on day three. Each person or station answers only once a day and notes are cleared overnight. Then you decide where everyone works, handle their requests and assess how the team is doing.`,
+      ),
+    },
+    {
+      id: 'team',
+      question: t('¿Quién forma el equipo?', 'Who is on the team?'),
+      answer: t(
+        `Cuatro investigadores: ${researchers.map((r) => `${r.name} (${r.title.toLowerCase()})`).join(', ')}. Cada uno tiene una especialidad, otra habilidad en la que se defiende y un punto débil.`,
+        `Four researchers: ${researchers.map((r) => `${r.name} (${r.title.toLowerCase()})`).join(', ')}. Each has a specialty, a second skill they can handle and a weak spot.`,
+      ),
+    },
+    { id: 'context', ...context },
+  ];
+  return {
+    topics: rng.shuffle(topics),
+    best: ONBOARDING_BEST,
+    why: 'Primero, qué hay que conseguir, porque da sentido a todo lo demás. Después, cómo funciona la jornada: sus reglas (pocas preguntas al día y notas que se borran por la noche) condicionan tu primera decisión del día 1. Luego, el equipo, que además ves en el panel. Y al final el contexto, que no cambia ninguna decisión.',
   };
 }
 
@@ -826,6 +901,9 @@ export function validateIsland(sc: IslandScenario): IslandIssue[] {
   if (new Set(sc.researchers.map((r) => r.name)).size !== sc.researchers.length) add('NAMES', 'Hay nombres de investigador repetidos.');
   if (new Set(sc.stations.map((s) => s.name)).size !== sc.stations.length) add('STATIONS', 'Hay estaciones repetidas.');
   if (sc.days.length !== 3) add('DAYS', 'Debe haber 3 días.');
+  const ob = sc.onboarding;
+  if (ob.topics.length !== 4 || new Set(ob.topics.map((x) => x.id)).size !== 4 || [...ob.best].sort().join() !== ob.topics.map((x) => x.id).sort().join())
+    add('ONBOARDING', 'El onboarding debe tener 4 preguntas distintas y un orden óptimo que las incluya todas.');
   sc.days.forEach((d) => {
     const ranked = bestAssignments(d, sc.researchers, sc.stations);
     const best = ranked[0];
@@ -895,6 +973,12 @@ export interface IslandDayAnswer {
   support: Record<string, number>; // id de petición -> índice de opción
   supportOrder: string[];
   reflect: Record<string, Level | 'unknown' | ''>;
+  timeSec: number;
+}
+
+/** Respuesta del onboarding: orden elegido (ids) y segundos dedicados. `order` vacío = no se confirmó. */
+export interface IslandOnboardingAnswer {
+  order: OnboardingTopic['id'][];
   timeSec: number;
 }
 

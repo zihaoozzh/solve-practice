@@ -381,3 +381,7 @@ code { background: var(--line-soft); padding: 1px 6px; border-radius: 4px; font-
 .option-list .option.fb-best { border-color: var(--ok); background: var(--ok-soft); }
 .option-list .option.fb-ok { border-color: var(--amber); background: var(--amber-soft); }
 .option-list .option.fb-poor { border-color: var(--ko); background: var(--ko-soft); }
+.rank-list { list-style: none; padding: 0; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.rank-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px 12px; }
+.rank-pos { font-weight: 700; color: var(--accent); width: 18px; }
+.rank-name { flex: 1; }

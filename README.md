@@ -42,9 +42,10 @@ La investigación sobre la prueba (fuentes, contradicciones y lo que no está co
 | --- | --- | --- |
 | Redrock Study | 35 min | Investigación, Análisis, Informe y 6 mini-casos |
 | Sea Wolf | 30 min | 3 sitios: perfil, clasificación, rondas y tratamiento |
-| SFL Island | 30 min | 3 días gestionando a 4 investigadores en 4 estaciones |
+| SFL Island | 30 min | Onboarding y 3 días gestionando a 4 investigadores en 4 estaciones |
 | SFL Classic | 20 min | Briefing, ranking de 4 iniciativas y 12 decisiones encadenadas |
 | Simulación 65 min | 65 min | Redrock → Sea Wolf |
+| Simulación 85 min | 85 min | Redrock → Sea Wolf → SFL Classic, con vuelta al menú entre pruebas |
 | Simulación 95 min | 95 min | Redrock → Sea Wolf → SFL Island, con vuelta al menú entre pruebas |
 
 Entre pruebas de una simulación aparece una pantalla intermedia, como el menú de tareas de la prueba real. Ninguna fuente describe una pausa formal con cronómetro, así que la pausa dura lo que tú quieras y el tiempo sobrante no pasa a la siguiente prueba.
@@ -62,6 +63,7 @@ Entre pruebas de una simulación aparece una pantalla intermedia, como el menú 
 - **Sea Wolf:** en cada sitio eliges el perfil (2 características), clasificas 10 microbios (pool de hasta 6), completas el pool con 4 rondas de "elige 1 de 3" y eliges un tratamiento de 3. Cada sitio garantiza un trío válido alcanzable siguiendo la regla de clasificación.
 - **SFL Island:**
   - 4 investigadores con perfil propio: especialidad (fortaleza), segunda habilidad y punto débil.
+  - **Onboarding** antes del día 1, ya con el reloj en marcha: ordenas 4 preguntas sobre el proyecto y recibes las 4 respuestas en ese orden. No se guardan en las notas.
   - Cada día tiene un objetivo (atender a las personas, cubrir las estaciones o equilibrar ambas cosas) y 4 fases:
     - **Explorar:** 3, 3 y 2 preguntas según el día. Cada persona o estación responde a una sola pregunta al día, y las notas se borran por la noche. El presupuesto es justo: en Difícil no sobra ninguna pregunta y en Normal como mucho una, así que cada pregunta malgastada te deja sin un dato que luego necesitas.
     - **Asignar:** cada movimiento pide un motivo de una lista cerrada.
@@ -105,7 +107,7 @@ Al terminar ves, en este orden:
 4. **La rúbrica completa** de cada prueba, desplegable:
    - Redrock (100): diario 10, con penalización por distractor; Análisis 9 por pregunta; Informe 3 por hueco, más el tipo y los valores del gráfico; mini-casos 5 cada uno.
    - Sea Wolf (100 por sitio): Perfil 10, Clasificación 20 (2 por microbio), Pool 20 (todo o nada) y Tratamiento 50 (10 por comprobación). Cada microbio mal clasificado muestra sus valores frente al rango, la regla que incumple y lo que tocaba.
-   - SFL Island (100 por día): Explorar 20, Asignar 30, Motivos 10, Apoyar 30 y Reflexionar 10.
+   - SFL Island (310): onboarding 10, por parejas, y 100 por día: Explorar 20, Asignar 30, Motivos 10, Apoyar 30 y Reflexionar 10.
    - SFL Classic (100): Ranking 10, por parejas, y 7,5 por cada una de las 12 decisiones (la aceptable vale 3,5).
 5. **Tiempo** por parte frente a la referencia, las decisiones más lentas y los periodos sin actividad.
 6. **Patrones del proceso:**

@@ -703,6 +703,8 @@ Estas decisiones son del simulador. Ninguna está confirmada como mecánica de l
 - **Una petición de Apoyar al día depende de lo explorado:** solo una persona tiene margen, y solo se sabe preguntándole cómo está. Se inspira en que las peticiones están conectadas entre sí (9.2.6) y en que las webs valoran usar la información obtenida (9.5). Sin la información, la opción prudente vale una puntuación parcial.
 - **Presupuesto justo:** en Difícil, las preguntas clave ocupan todo el presupuesto; en Normal, todo menos una. Se usa el reparto 3/3/2 (9.2.4), configurable en `ISLAND_CONFIG`.
 - **La longitud no delata la respuesta:** en el Island y en el Classic, la mejor opción es la más larga, la más corta o la intermedia más o menos un tercio de las veces cada una. Así no se aprende un truco que en la prueba real no sirve.
+- **Onboarding:** se ordenan 4 preguntas (9.2.3), y el orden defendible lo fija el simulador: objetivo, después funcionamiento de la jornada, después equipo y al final contexto. Vale 10 puntos, por parejas. No se sabe si la prueba real lo puntúa.
+- **Simulaciones:** 65 min (Redrock → Sea Wolf), 85 min (→ SFL Classic) y 95 min (→ SFL Island), según la tabla de 2.3.
 - **Pausa entre pruebas:** como nadie confirma una pausa con cronómetro (9.4), la pantalla intermedia no tiene tiempo y el tiempo que sobra de una prueba no pasa a la siguiente.
 
 ---

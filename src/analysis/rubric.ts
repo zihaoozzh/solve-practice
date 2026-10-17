@@ -389,6 +389,7 @@ export const ERROR_LABELS: Record<string, string> = {
   'sfl-support-ok': 'SFL: respuesta de apoyo aceptable pero no la mejor',
   'sfl-support-poor': 'SFL: mala respuesta de apoyo',
   'sfl-support-guess': 'SFL: trabajo pasado a alguien sin saber si tenía margen',
+  'sfl-onboarding': 'SFL: orden del onboarding',
   'sfl-urgent': 'SFL: no atender primero lo urgente',
   'sfl-reflect': 'SFL: reflexión equivocada con información',
   'sfl-reflect-guess': 'SFL: reflexión por intuición',

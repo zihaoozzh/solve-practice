@@ -7,7 +7,9 @@ import {
   emptyIslandDay,
   generateIsland,
   IslandDayAnswer,
+  IslandOnboardingAnswer,
   IslandScenario,
+  ONBOARDING_BEST,
   reflectTruth,
   validateIsland,
 } from '../src/sfl/island';
@@ -41,6 +43,8 @@ function perfectPlay(sc: IslandScenario): IslandDayAnswer[] {
   });
   return ans;
 }
+
+const bestOnboarding = (sc: IslandScenario): IslandOnboardingAnswer => ({ order: sc.onboarding.best.slice(), timeSec: 120 });
 
 describe('SFL Island: generador y validador', () => {
   it('es determinista y no depende del idioma', () => {
@@ -203,16 +207,59 @@ describe('SFL Island: perfiles, presupuesto justo y apoyo según lo explorado', 
   });
 });
 
+describe('SFL Island: onboarding', () => {
+  it('tiene 4 preguntas distintas, presentadas en orden barajado, y no cambia el resto del escenario', () => {
+    let shuffled = 0;
+    for (let i = 0; i < 30; i++) {
+      const sc = generateIsland(`ob${i}`, 'normal', i % 2 ? 'en' : 'es');
+      expect(sc.onboarding.topics.map((x) => x.id).sort()).toEqual([...ONBOARDING_BEST].sort());
+      expect(sc.onboarding.best).toEqual(ONBOARDING_BEST);
+      if (sc.onboarding.topics.map((x) => x.id).join() !== ONBOARDING_BEST.join()) shuffled++;
+      for (const x of sc.onboarding.topics) expect(x.answer.length).toBeGreaterThan(20);
+    }
+    expect(shuffled).toBeGreaterThan(20);
+    // El onboarding usa su propio generador: el resto del escenario es igual en los dos idiomas
+    const es = generateIsland('obx', 'normal', 'es');
+    const en = generateIsland('obx', 'normal', 'en');
+    expect(en.onboarding.topics.map((x) => x.id)).toEqual(es.onboarding.topics.map((x) => x.id));
+  });
+
+  it('puntúa el orden por parejas (10 puntos), con parcial para un orden casi correcto', () => {
+    const sc = generateIsland('obg', 'normal');
+    const ans = perfectPlay(sc);
+    const score = (order: IslandOnboardingAnswer['order']) => gradeIsland(sc, ans, { order, timeSec: 100 }).rubric.parts.find((p) => p.key === 'isl-onboarding')!.earned;
+    expect(score(['goal', 'rules', 'team', 'context'])).toBe(10);
+    const swapped = score(['rules', 'goal', 'team', 'context']);
+    expect(swapped).toBeGreaterThan(7);
+    expect(swapped).toBeLessThan(10);
+    expect(score(['context', 'team', 'rules', 'goal'])).toBe(0);
+    expect(score([])).toBe(0);
+    const g = gradeIsland(sc, ans, { order: ['context', 'goal', 'rules', 'team'], timeSec: 400 });
+    const dec = g.decisions.find((d) => d.id === 'isl-onboarding')!;
+    expect(dec.ok).toBe('partial');
+    expect(dec.when).toMatch(/Onboarding/);
+    expect(g.rubric.parts.flatMap((p) => p.items).some((i) => i.errorType === 'sfl-onboarding')).toBe(true);
+    expect(islandPatterns(sc, ans, g, { order: ['goal'], timeSec: 400 }).map((p) => p.id)).toContain('sfl-onboarding-slow');
+  });
+
+  it('el validador rechaza un onboarding incompleto', () => {
+    const broken: IslandScenario = JSON.parse(JSON.stringify(generateIsland('obv', 'normal')));
+    broken.onboarding.topics.pop();
+    expect(validateIsland(broken).map((x) => x.code)).toContain('ONBOARDING');
+  });
+});
+
 describe('SFL Island: corrección', () => {
-  it('el juego perfecto suma 300 de 300 y no deja patrones', () => {
+  it('el juego perfecto suma 310 de 310 (onboarding 10 + 3 días de 100) y no deja patrones', () => {
     for (let i = 0; i < 10; i++) {
       const sc = generateIsland(`p${i}`, 'normal');
       const ans = perfectPlay(sc);
-      const g = gradeIsland(sc, ans);
-      expect(g.rubric.max).toBe(300);
-      expect(g.rubric.earned).toBe(300);
+      const ob = bestOnboarding(sc);
+      const g = gradeIsland(sc, ans, ob);
+      expect(g.rubric.max).toBe(310);
+      expect(g.rubric.earned).toBe(310);
       expect(g.decisions.every((d) => d.ok === true)).toBe(true);
-      expect(islandPatterns(sc, ans, g)).toEqual([]);
+      expect(islandPatterns(sc, ans, g, ob)).toEqual([]);
     }
   });
 
@@ -428,7 +475,7 @@ describe('Nota global con varias pruebas', () => {
   it('cada prueba pesa lo mismo y los porcentajes perdidos siguen sumando 100 − nota', () => {
     const isl = generateIsland('mix', 'normal');
     const cl = generateClassic('mix', 'normal');
-    const gi = gradeIsland(isl, perfectPlay(isl)).rubric; // 300 de 300
+    const gi = gradeIsland(isl, perfectPlay(isl), bestOnboarding(isl)).rubric; // 310 de 310
     const gc = gradeClassic(cl, emptyClassic()).rubric; // 0 de 100
     const o = overall([gi, gc]);
     expect(o.scorePct).toBe(50);
@@ -436,7 +483,7 @@ describe('Nota global con varias pruebas', () => {
     // Con fallos en las dos, un punto de la prueba pequeña resta más nota que uno de la grande
     const half = perfectPlay(isl);
     half[0].assign = { ...isl.days[0].baseline };
-    const o2 = overall([gradeIsland(isl, half).rubric, gradeClassic(cl, emptyClassic()).rubric]);
+    const o2 = overall([gradeIsland(isl, half, bestOnboarding(isl)).rubric, gradeClassic(cl, emptyClassic()).rubric]);
     const perPoint = (game: string) => {
       const xs = o2.pointsOff.filter((p) => p.game === game);
       return xs.reduce((s, p) => s + p.pct, 0) / xs.reduce((s, p) => s + p.lost, 0);

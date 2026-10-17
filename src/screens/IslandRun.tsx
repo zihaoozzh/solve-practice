@@ -8,7 +8,9 @@ import {
   emptyIslandDay,
   ISLAND_CONFIG,
   IslandDayAnswer,
+  IslandOnboardingAnswer,
   IslandScenario,
+  OnboardingTopic,
   Level,
   LEVEL_LABEL,
   Reason,
@@ -25,10 +27,10 @@ interface Props {
   durationSec: number;
   label?: string;
   exam?: boolean;
-  onFinish: (answers: IslandDayAnswer[], timedOut: boolean) => void;
+  onFinish: (answers: IslandDayAnswer[], timedOut: boolean, onboarding: IslandOnboardingAnswer) => void;
 }
 
-type Step = 'explore' | 'assign' | 'support' | 'reflect' | 'feedback';
+type Step = 'onboarding' | 'explore' | 'assign' | 'support' | 'reflect' | 'feedback';
 const DAY_GUIDE_SEC = 10 * 60;
 
 export function IslandRun({ scenario, durationSec, label, exam = false, onFinish }: Props) {
@@ -36,11 +38,16 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
   const en = sc.lang === 'en';
   const t = (es: string, eng: string) => (en ? eng : es);
   const [dayIdx, setDayIdx] = useState(0);
-  const [step, setStep] = useState<Step>('explore');
+  const [step, setStep] = useState<Step>('onboarding');
+  // Onboarding: orden de las 4 preguntas; tras confirmar se ven las 4 respuestas (no pasan a las notas)
+  const [obOrder, setObOrder] = useState<OnboardingTopic['id'][]>(() => sc.onboarding.topics.map((x) => x.id));
+  const [obConfirmed, setObConfirmed] = useState(false);
+  const obStart = useRef(Date.now());
+  const obAnswer = useRef<IslandOnboardingAnswer>({ order: [], timeSec: 0 });
   const [cur, setCur] = useState<IslandDayAnswer>(() => emptyIslandDay(sc, 0));
   const [done, setDone] = useState<IslandDayAnswer[]>([]);
   const [openReq, setOpenReq] = useState<string | null>(null);
-  const [showMission, setShowMission] = useState(true);
+  const [showMission, setShowMission] = useState(false);
   const dayStart = useRef(Date.now());
   const stepStart = useRef(Date.now());
   const finished = useRef(false);
@@ -51,7 +58,9 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
   const finishAll = (answers: IslandDayAnswer[], timedOut: boolean) => {
     if (finished.current) return;
     finished.current = true;
-    onFinish(answers, timedOut);
+    // Si el tiempo se acaba durante el onboarding, cuenta lo que llevabas (sin orden si no lo confirmaste)
+    if (state.current.step === 'onboarding' && !obAnswer.current.timeSec) obAnswer.current = { order: [], timeSec: (Date.now() - obStart.current) / 1000 };
+    onFinish(answers, timedOut, obAnswer.current);
   };
 
   const { remaining, now } = useCountdown(durationSec, () => {
@@ -60,7 +69,8 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
     // La asignación inicial (por cargos) solo cuenta si llegaste a confirmarla o a tocarla
     const touchedToday = sc.researchers.some((r) => touched.current.has(`${s.dayIdx}-${r.id}`));
     const counts = s.step !== 'explore' && (s.step !== 'assign' || touchedToday);
-    if (answers.length < sc.days.length) answers.push({ ...s.cur, assign: counts ? s.cur.assign : {}, timeSec: (Date.now() - dayStart.current) / 1000 });
+    if (s.step === 'onboarding') answers.push({ ...s.cur, assign: {}, timeSec: 0 });
+    else if (answers.length < sc.days.length) answers.push({ ...s.cur, assign: counts ? s.cur.assign : {}, timeSec: (Date.now() - dayStart.current) / 1000 });
     while (answers.length < sc.days.length) answers.push({ ...emptyIslandDay(sc, answers.length), assign: {} });
     finishAll(answers, true);
   });
@@ -72,11 +82,33 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
 
   useEffect(() => {
     stepStart.current = Date.now();
-    recorder.phase(`sfl-island-${dayIdx + 1}-${step}`);
+    recorder.phase(step === 'onboarding' ? 'sfl-island-onboarding' : `sfl-island-${dayIdx + 1}-${step}`);
+    if (step === 'onboarding') recorder.begin('sfl-onboarding', 'order');
     if (step === 'assign') sc.researchers.forEach((r) => recorder.begin('sfl-assign', `${dayIdx}-${r.id}`));
     if (step === 'reflect') sc.researchers.forEach((r) => recorder.begin('sfl-reflect', `${dayIdx}-${r.id}`));
     if (step === 'explore') day.questions.forEach((q) => recorder.begin('sfl-ask', `${dayIdx}-${q.id}`));
   }, [dayIdx, step]);
+
+  // ---- Onboarding
+  const moveTopic = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (obConfirmed || j < 0 || j >= obOrder.length) return;
+    const next = obOrder.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    recorder.change('sfl-onboarding', 'order', obOrder.join('>'), next.join('>'));
+    setObOrder(next);
+  };
+  const confirmOnboarding = () => {
+    recorder.decide('sfl-onboarding', 'order', obOrder.join('>'));
+    setObConfirmed(true);
+  };
+  const startDay1 = () => {
+    obAnswer.current = { order: obOrder, timeSec: (Date.now() - obStart.current) / 1000 };
+    dayStart.current = Date.now();
+    setStep('explore');
+    window.scrollTo(0, 0);
+  };
+  const topic = (id: string) => sc.onboarding.topics.find((x) => x.id === id)!;
 
   // ---- Explorar
   const askedTargets = new Set(cur.asked.map((q) => q.split(':')[0]));
@@ -173,8 +205,8 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
   const allAnswers = [...done, cur];
 
   const stepLabel: Record<Step, string> = en
-    ? { explore: 'Explore', assign: 'Assign', support: 'Support', reflect: 'Reflect', feedback: 'Day summary' }
-    : { explore: 'Explorar', assign: 'Asignar', support: 'Apoyar', reflect: 'Reflexionar', feedback: 'Resumen del día' };
+    ? { onboarding: 'Onboarding', explore: 'Explore', assign: 'Assign', support: 'Support', reflect: 'Reflect', feedback: 'Day summary' }
+    : { onboarding: 'Onboarding', explore: 'Explorar', assign: 'Asignar', support: 'Apoyar', reflect: 'Reflexionar', feedback: 'Resumen del día' };
   const dimLabel = day.reflectDimension === 'workload' ? t('Carga de trabajo', 'Workload') : t('Ánimo', 'Morale');
 
   return (
@@ -188,15 +220,17 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
           </span>
         </div>
         <ol className="stepper">
+          <li className={step === 'onboarding' ? 'active' : 'done'}>Onboarding</li>
           {sc.days.map((_, i) => (
-            <li key={i} className={i === dayIdx ? 'active' : i < dayIdx ? 'done' : ''}>
+            <li key={i} className={step !== 'onboarding' && i === dayIdx ? 'active' : step !== 'onboarding' && i < dayIdx ? 'done' : ''}>
               {t('Día', 'Day')} {i + 1}
-              {i === dayIdx ? ` · ${stepLabel[step]}` : ''}
+              {step !== 'onboarding' && i === dayIdx ? ` · ${stepLabel[step]}` : ''}
             </li>
           ))}
         </ol>
         <div className="guide">
-          {!exam && (
+          {!exam && step === 'onboarding' && <span>Onboarding ≈3:00</span>}
+          {!exam && step !== 'onboarding' && (
             <span className={dayElapsed > DAY_GUIDE_SEC ? 'over' : ''}>
               {t('Día', 'Day')} {fmtTime(dayElapsed)} / ≈10:00
             </span>
@@ -216,6 +250,64 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
               </button>
             </div>
           )}
+          {step === 'onboarding' && (
+            <section className="card" data-region="onboarding" data-track="onboarding">
+              <div className="q-num">{sc.island} · Onboarding</div>
+              <p>{sc.mission}</p>
+              {!obConfirmed ? (
+                <>
+                  <h2>{t('¿En qué orden quieres recibir esta información?', 'In what order do you want this information?')}</h2>
+                  <p className="hint">
+                    {t(
+                      'Ordena las 4 preguntas. Recibirás las cuatro respuestas en ese orden, y no se guardan en las notas. El reloj ya está corriendo.',
+                      'Rank the 4 questions. You will get all four answers in that order, and they are not saved to your notes. The clock is already running.',
+                    )}
+                  </p>
+                  <ol className="rank-list">
+                    {obOrder.map((id, i) => (
+                      <li key={id} className="rank-item" data-track={`onboarding:${id}`}>
+                        <span className="rank-pos">{i + 1}</span>
+                        <span className="rank-name">{topic(id).question}</span>
+                        <button type="button" className="btn ghost small" disabled={i === 0} onClick={() => moveTopic(i, -1)} aria-label={t('Subir', 'Move up')}>
+                          ↑
+                        </button>
+                        <button type="button" className="btn ghost small" disabled={i === obOrder.length - 1} onClick={() => moveTopic(i, 1)} aria-label={t('Bajar', 'Move down')}>
+                          ↓
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="actions">
+                    <ConfirmButton
+                      warning={t('¿Confirmar el orden? No podrás cambiarlo.', 'Confirm the order? You cannot change it later.')}
+                      labels={{ confirm: t('Confirmar', 'Confirm'), cancel: t('Cancelar', 'Cancel') }}
+                      onConfirm={confirmOnboarding}
+                    >
+                      {t('Confirmar el orden →', 'Confirm order →')}
+                    </ConfirmButton>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {obOrder.map((id, i) => (
+                    <div key={id} className="note" data-track={`onboarding-answer:${id}`}>
+                      <div className="small muted">
+                        {i + 1}. {topic(id).question}
+                      </div>
+                      <div>{topic(id).answer}</div>
+                    </div>
+                  ))}
+                  <p className="muted small">{t('Estas respuestas no se guardan en las notas.', 'These answers are not saved to your notes.')}</p>
+                  <div className="actions">
+                    <button type="button" className="btn primary" onClick={startDay1}>
+                      {t('Empezar el día 1 →', 'Start day 1 →')}
+                    </button>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+          {step !== 'onboarding' && (
           <div className="card day-brief" data-region="brief" data-track="brief">
             <div className="q-num">
               {t('Día', 'Day')} {day.day} · {stepLabel[step]}
@@ -223,6 +315,7 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
             <h2>{day.goal}</h2>
             <p className="muted">{day.briefing}</p>
           </div>
+          )}
 
           {step === 'explore' && (
             <section data-region="explore">
@@ -476,7 +569,7 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
 
           {step === 'feedback' && (
             <section data-region="feedback">
-              <DayFeedback scenario={sc} answers={done} day={dayIdx} />
+              <DayFeedback scenario={sc} answers={done} day={dayIdx} onboarding={obAnswer.current} />
               <div className="actions">
                 <button type="button" className="btn primary" onClick={() => nextDay(done)}>
                   {dayIdx + 1 < sc.days.length ? t(`Empezar el día ${dayIdx + 2} →`, `Start day ${dayIdx + 2} →`) : t('Ver la corrección', 'See the correction')}
@@ -540,8 +633,8 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
   );
 }
 
-function DayFeedback({ scenario, answers, day }: { scenario: IslandScenario; answers: IslandDayAnswer[]; day: number }) {
-  const g = gradeIsland(scenario, [...answers, ...scenario.days.slice(answers.length).map((_, i) => emptyIslandDay(scenario, answers.length + i))]);
+function DayFeedback({ scenario, answers, day, onboarding }: { scenario: IslandScenario; answers: IslandDayAnswer[]; day: number; onboarding: IslandOnboardingAnswer }) {
+  const g = gradeIsland(scenario, [...answers, ...scenario.days.slice(answers.length).map((_, i) => emptyIslandDay(scenario, answers.length + i))], onboarding);
   const parts = g.rubric.parts.filter((p) => p.key.startsWith(`isl${day}-`));
   const earned = Math.round(parts.reduce((s, p) => s + p.earned, 0) * 10) / 10;
   return (

@@ -13,7 +13,7 @@ import { recorder, SessionLog } from './lib/recorder';
 import { buildAnalysis, ExtraGame, FullAnalysis } from './analysis';
 import { IslandRun } from './screens/IslandRun';
 import { SflReview } from './screens/SflReview';
-import { generateIsland, IslandDayAnswer, IslandScenario } from './sfl/island';
+import { generateIsland, IslandDayAnswer, IslandOnboardingAnswer, IslandScenario } from './sfl/island';
 import { gradeIsland, IslandDecision, islandContext, islandPatterns, islandTimes } from './sfl/islandGrade';
 import { ClassicRun } from './screens/ClassicRun';
 import { ClassicAnswers, ClassicScenario, classicContext, classicPatterns, classicTimes, generateClassic, gradeClassic } from './sfl/classic';
@@ -24,6 +24,7 @@ type Module = 'redrock' | 'seawolf' | 'sfl-island' | 'sfl-classic';
 interface IslandRunResult {
   scenario: IslandScenario;
   answers: IslandDayAnswer[];
+  onboarding: IslandOnboardingAnswer;
   timedOut: boolean;
 }
 
@@ -45,6 +46,7 @@ const PLAN: Record<Mode, Module[]> = {
   redrock: ['redrock'],
   seawolf: ['seawolf'],
   full: ['redrock', 'seawolf'],
+  full85: ['redrock', 'seawolf', 'sfl-classic'],
   full95: ['redrock', 'seawolf', 'sfl-island'],
   'sfl-island': ['sfl-island'],
   'sfl-classic': ['sfl-classic'],
@@ -135,12 +137,12 @@ export default function App() {
     const extra: ExtraGame[] = [];
     let islGrade: ReturnType<typeof gradeIsland> | null = null;
     if (isl) {
-      islGrade = gradeIsland(isl.scenario, isl.answers);
+      islGrade = gradeIsland(isl.scenario, isl.answers, isl.onboarding);
       extra.push({
         rubric: islGrade.rubric,
-        times: islandTimes(isl.answers),
+        times: islandTimes(isl.answers, isl.onboarding),
         ...islandContext(isl.scenario, islGrade),
-        patterns: islandPatterns(isl.scenario, isl.answers, islGrade),
+        patterns: islandPatterns(isl.scenario, isl.answers, islGrade, isl.onboarding),
       });
     }
     let clGrade: ReturnType<typeof gradeClassic> | null = null;
@@ -180,6 +182,8 @@ export default function App() {
       });
     }
     if (isl && islGrade) {
+      const ob = islGrade.rubric.parts.find((p) => p.key === 'isl-onboarding')!;
+      phases.push({ key: 'sfl-onboarding', name: 'SFL onboarding', timeSec: isl.onboarding.timeSec, score: Math.round((ob.earned / ob.max) * 100), correct: ob.earned, total: ob.max });
       isl.answers.forEach((ans, d) => {
         const ps = islGrade!.rubric.parts.filter((p) => p.key.startsWith(`isl${d}-`));
         const earned = Math.round(ps.reduce((s, p) => s + p.earned, 0) * 10) / 10;
@@ -300,8 +304,8 @@ export default function App() {
           durationSec={durationSec('sfl-island')}
           exam={config.exam}
           label={plan.length > 1 ? `Parte ${step + 1}: SFL Island` : undefined}
-          onFinish={(answers, timedOut) => {
-            const res = { scenario: islScenario, answers, timedOut };
+          onFinish={(answers, timedOut, onboarding) => {
+            const res = { scenario: islScenario, answers, onboarding, timedOut };
             setIsland(res);
             next({ island: res });
           }}
