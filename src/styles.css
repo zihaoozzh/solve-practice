@@ -385,3 +385,4 @@ code { background: var(--line-soft); padding: 1px 6px; border-radius: 4px; font-
 .rank-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px 12px; }
 .rank-pos { font-weight: 700; color: var(--accent); width: 18px; }
 .rank-name { flex: 1; }
+.history-table .btn { white-space: nowrap; }

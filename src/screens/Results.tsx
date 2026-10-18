@@ -33,6 +33,8 @@ interface Props {
   log?: SessionLog | null;
   sessionSaved?: boolean | null;
   previous?: HistoryEntry[];
+  /** Fecha del intento si el informe se abre desde el historial. */
+  fromHistory?: string;
   /** Contenido extra de la corrección (p. ej. SFL). */
   extraReview?: ReactNode;
   onHome: () => void;
@@ -46,7 +48,7 @@ export function seaWolfScore(r: SeaWolfRunResult): number {
   return Math.round(g.reduce((s, x) => s + x.score, 0) / g.length);
 }
 
-export function Results({ mode, redrock, seawolf, savedTo, analysis, log = null, sessionSaved = null, previous = [], extraReview, onHome, onStats, onRepeat }: Props) {
+export function Results({ mode, redrock, seawolf, savedTo, analysis, log = null, sessionSaved = null, previous = [], fromHistory, extraReview, onHome, onStats, onRepeat }: Props) {
   const rr = redrock ? gradeRedrock(redrock.scenario, redrock.answers) : null;
   const sw = seawolf ? seaWolfScore(seawolf) : null;
   const overall = analysis ? analysis.overall.scorePct : rr && sw != null ? Math.round((rr.overall + sw) / 2) : (rr?.overall ?? sw ?? 0);
@@ -57,13 +59,21 @@ export function Results({ mode, redrock, seawolf, savedTo, analysis, log = null,
     <div className="results">
       <header className="results-header">
         <div>
-          <div className="q-num">Resultados · {MODE_LABEL[mode]}</div>
+          <div className="q-num">
+            {fromHistory ? 'Informe del historial' : 'Resultados'} · {MODE_LABEL[mode]}
+          </div>
           <h1>{overall.toLocaleString('es-ES', { maximumFractionDigits: 1 })} %</h1>
           <div className="muted">
             Semilla <strong>{seed}</strong> · {difficulty === 'hard' ? 'Difícil' : 'Normal'}
           </div>
           <div className="muted small">
-            {savedTo === 'file' ? 'Intento guardado en data/intentos.json.' : savedTo === 'browser' ? 'Intento guardado en este navegador.' : 'Guardando intento…'}
+            {fromHistory
+              ? `Intento del ${new Date(fromHistory).toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' })}${log ? '' : ' · sin registro del ratón: no hay mapa de calor ni repetición'}.`
+              : savedTo === 'file'
+                ? 'Intento guardado en data/intentos.json; el informe completo, en data/informes/.'
+                : savedTo === 'browser'
+                  ? 'Intento guardado en este navegador.'
+                  : 'Guardando intento…'}
           </div>
         </div>
         <div className="results-actions">
@@ -72,7 +82,7 @@ export function Results({ mode, redrock, seawolf, savedTo, analysis, log = null,
           </button>
           {onStats && (
             <button type="button" className="btn outline" onClick={onStats}>
-              Ver evolución
+              {fromHistory ? '← Volver al historial' : 'Ver evolución'}
             </button>
           )}
           <button type="button" className="btn primary" onClick={onHome}>

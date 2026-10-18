@@ -30,6 +30,10 @@ export interface HistoryEntry {
   scorePct?: number;
   /** Frecuencia de cada tipo de error en este intento. */
   errors?: Record<string, number>;
+  /** Id del registro del proceso en data/sesiones/. */
+  session?: string;
+  /** Dónde se guardó el informe completo (data/informes/<id>.json o el navegador); sin él no se puede reabrir. */
+  report?: Source;
   detail?: {
     journalPrecision?: number;
     caseTypes?: Record<string, { correct: number; total: number }>;
