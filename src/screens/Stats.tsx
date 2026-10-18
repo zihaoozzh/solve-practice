@@ -11,6 +11,10 @@ interface Props {
   onBack: () => void;
   onClear: () => void;
   onExport: () => void;
+  /** Abre el informe de evaluación completo de un intento. */
+  onOpenReport?: (entry: HistoryEntry) => void;
+  /** Mensaje si no se pudo abrir un informe. */
+  reportError?: string | null;
 }
 
 const PHASE_ORDER = ['investigacion', 'analisis', 'informe', 'estudio', 'casos', 'zona-1', 'zona-2', 'zona-3'];
@@ -28,7 +32,7 @@ const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.le
 const pctOf = (c: number, t: number) => (t ? Math.round((c / t) * 100) : NaN);
 const show = (x: number, suffix = '%') => (Number.isFinite(x) ? `${Math.round(x)}${suffix}` : '—');
 
-export function Stats({ entries, source, file, onBack, onClear, onExport }: Props) {
+export function Stats({ entries, source, file, onBack, onClear, onExport, onOpenReport, reportError }: Props) {
   const [mode, setMode] = useState<Mode | 'all'>('all');
   const [examOnly, setExamOnly] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -307,6 +311,8 @@ export function Stats({ entries, source, file, onBack, onClear, onExport }: Prop
           )}
 
           <h3>Todos los intentos</h3>
+          <p className="muted small">Pulsa «Ver informe» para abrir la evaluación completa de un intento: nota, rúbrica, puntos perdidos, patrones, tiempos, mapa de calor, repetición y revisión paso a paso.</p>
+          {reportError && <p className="warn-text">{reportError}</p>}
           <table className="history-table">
             <thead>
               <tr>
@@ -316,6 +322,7 @@ export function Stats({ entries, source, file, onBack, onClear, onExport }: Prop
                 <th>Semilla</th>
                 <th>Puntuación</th>
                 <th>Tiempo y aciertos por fase</th>
+                <th>Informe</th>
               </tr>
             </thead>
             <tbody>
@@ -345,6 +352,17 @@ export function Stats({ entries, source, file, onBack, onClear, onExport }: Prop
                           {p.total ? ` · ${p.correct}/${p.total}` : p.score != null ? ` · ${p.score}%` : ''}
                         </span>
                       ))}
+                    </td>
+                    <td>
+                      {h.report && onOpenReport ? (
+                        <button type="button" className="btn outline small" data-track={`report:${h.id}`} onClick={() => onOpenReport(h)}>
+                          Ver informe
+                        </button>
+                      ) : (
+                        <span className="muted small" title="Intento guardado antes de que existiera esta función">
+                          —
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

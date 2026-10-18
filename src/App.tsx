@@ -10,36 +10,19 @@ import { randomSeed } from './lib/rng';
 import { addHistory, clearHistory, exportHistory, HistoryEntry, loadHistory, Mode, PhaseStat, Source } from './lib/history';
 import { durationSec } from './config';
 import { recorder, SessionLog } from './lib/recorder';
-import { buildAnalysis, ExtraGame, FullAnalysis } from './analysis';
+import type { FullAnalysis } from './analysis';
+import { ClassicRunResult, Collected, evaluate, IslandRunResult } from './lib/evaluate';
+import { AttemptRecord, clearReports, loadReport, loadSession, saveReport } from './lib/reports';
 import { IslandRun } from './screens/IslandRun';
 import { SflReview } from './screens/SflReview';
-import { generateIsland, IslandDayAnswer, IslandOnboardingAnswer, IslandScenario } from './sfl/island';
-import { gradeIsland, IslandDecision, islandContext, islandPatterns, islandTimes } from './sfl/islandGrade';
+import { generateIsland } from './sfl/island';
+import type { IslandDecision } from './sfl/islandGrade';
 import { ClassicRun } from './screens/ClassicRun';
-import { ClassicAnswers, ClassicScenario, classicContext, classicPatterns, classicTimes, generateClassic, gradeClassic } from './sfl/classic';
+import { generateClassic } from './sfl/classic';
 import type { SflDecisionView } from './screens/SflReview';
 
 type Module = 'redrock' | 'seawolf' | 'sfl-island' | 'sfl-classic';
 
-interface IslandRunResult {
-  scenario: IslandScenario;
-  answers: IslandDayAnswer[];
-  onboarding: IslandOnboardingAnswer;
-  timedOut: boolean;
-}
-
-interface ClassicRunResult {
-  scenario: ClassicScenario;
-  answers: ClassicAnswers;
-  timedOut: boolean;
-}
-
-interface Collected {
-  redrock?: RedrockRunResult;
-  seawolf?: SeaWolfRunResult;
-  island?: IslandRunResult;
-  classic?: ClassicRunResult;
-}
 type Screen = 'home' | 'stats' | 'run' | 'interlude' | 'results';
 
 const PLAN: Record<Mode, Module[]> = {
@@ -71,6 +54,9 @@ export default function App() {
   const [log, setLog] = useState<SessionLog | null>(null);
   const [sessionSaved, setSessionSaved] = useState<boolean | null>(null);
   const [previous, setPrevious] = useState<HistoryEntry[]>([]);
+  /** Intento del historial cuyo informe se está viendo (null = el intento que acabas de terminar). */
+  const [viewing, setViewing] = useState<HistoryEntry | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const plan = PLAN[config.mode];
   const current = plan[step];
@@ -109,6 +95,7 @@ export default function App() {
     setAnalysis(undefined);
     setLog(null);
     setSessionSaved(null);
+    setViewing(null);
     setStep(0);
     setRunId((x) => x + 1);
     recorder.start({ mode: c.mode, seed, difficulty: c.difficulty, lang: c.lang, exam: c.exam });
@@ -116,8 +103,35 @@ export default function App() {
   };
 
   const openStats = async () => {
+    setReportError(null);
     setStats(await loadHistory());
     go('stats');
+  };
+
+  /** Abre el informe completo de un intento del historial, recalculado con lo que se guardó al terminarlo. */
+  const openReport = async (entry: HistoryEntry) => {
+    setReportError(null);
+    const rec = await loadReport(entry.id);
+    if (!rec) {
+      setReportError(`No se encuentra el informe del intento del ${new Date(entry.date).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}.`);
+      return;
+    }
+    const sessionLog = await loadSession(rec.sessionId);
+    const ev = evaluate(rec, sessionLog);
+    setConfig(rec.config);
+    setRedrock(rec.redrock);
+    setSeawolf(rec.seawolf);
+    setIsland(rec.island);
+    setClassic(rec.classic);
+    setAnalysis(ev.analysis);
+    setIslandDecisions(ev.islGrade?.decisions ?? []);
+    setClassicDecisions(ev.clGrade?.decisions ?? []);
+    setLog(sessionLog);
+    setSessionSaved(!!sessionLog);
+    setPrevious((stats?.entries ?? []).filter((e) => e.mode === entry.mode && e.date < entry.date));
+    setSavedTo(entry.report ?? null);
+    setViewing(entry);
+    go('results');
   };
 
   /** Pasa a la siguiente prueba del plan o termina la sesión. */
@@ -134,33 +148,7 @@ export default function App() {
   const finishAll = async ({ redrock: rr, seawolf: sw, island: isl, classic: cl }: Collected) => {
     const { log: sessionLog, savedToFile } = await recorder.finish();
     const prev = (await loadHistory()).entries.filter((e) => e.mode === config.mode);
-    const extra: ExtraGame[] = [];
-    let islGrade: ReturnType<typeof gradeIsland> | null = null;
-    if (isl) {
-      islGrade = gradeIsland(isl.scenario, isl.answers, isl.onboarding);
-      extra.push({
-        rubric: islGrade.rubric,
-        times: islandTimes(isl.answers, isl.onboarding),
-        ...islandContext(isl.scenario, islGrade),
-        patterns: islandPatterns(isl.scenario, isl.answers, islGrade, isl.onboarding),
-      });
-    }
-    let clGrade: ReturnType<typeof gradeClassic> | null = null;
-    if (cl) {
-      clGrade = gradeClassic(cl.scenario, cl.answers);
-      extra.push({
-        rubric: clGrade.rubric,
-        times: classicTimes(cl.answers),
-        ...classicContext(cl.scenario, clGrade),
-        patterns: classicPatterns(cl.scenario, cl.answers, clGrade),
-      });
-    }
-    const a = buildAnalysis({
-      redrock: rr && { scenario: rr.scenario, answers: rr.answers, times: rr.times },
-      seawolf: sw && { scenario: sw.scenario, answers: sw.answers },
-      extra,
-      log: sessionLog,
-    });
+    const { analysis: a, islGrade, clGrade } = evaluate({ redrock: rr, seawolf: sw, island: isl, classic: cl }, sessionLog);
     const phases: PhaseStat[] = [];
     if (rr) {
       const part = (k: string) => a.games.find((g) => g.game === 'redrock')!.parts.find((p) => p.key === k)!;
@@ -244,7 +232,21 @@ export default function App() {
     setLog(sessionLog);
     setSessionSaved(savedToFile);
     setPrevious(prev);
-    addHistory(entry).then(setSavedTo);
+    // El informe completo se guarda aparte para poder reabrirlo desde el historial
+    const rec: AttemptRecord = {
+      version: 1,
+      id: entry.id,
+      date: entry.date,
+      config: { mode: config.mode, difficulty: config.difficulty, seed: config.seed, aids: config.aids, exam: config.exam, lang: config.lang },
+      sessionId: savedToFile ? sessionLog?.meta.id : undefined,
+      redrock: rr,
+      seawolf: sw,
+      island: isl,
+      classic: cl,
+    };
+    saveReport(rec)
+      .then((where) => addHistory({ ...entry, session: rec.sessionId, report: where ?? undefined }))
+      .then(setSavedTo);
     go('results');
   };
 
@@ -259,8 +261,11 @@ export default function App() {
           file={stats.file}
           onBack={() => go('home')}
           onExport={() => exportHistory(stats.entries)}
+          onOpenReport={openReport}
+          reportError={reportError}
           onClear={async () => {
             await clearHistory();
+            await clearReports();
             setStats(await loadHistory());
           }}
         />
@@ -353,6 +358,7 @@ export default function App() {
           log={log}
           sessionSaved={sessionSaved}
           previous={previous}
+          fromHistory={viewing?.date}
           extraReview={
             <>
               {island && islandDecisions.length > 0 && <SflReview title="SFL Island" decisions={islandDecisions} days={island.scenario.days.length} />}

@@ -19,7 +19,7 @@ Para probar qué pasa cuando se acaba el tiempo, añade `?segundos=N` a la direc
 
 ## Trabajar en la nube
 
-El repositorio es privado y no incluye tus datos de práctica: `data/intentos.json` y `data/sesiones/` están en `.gitignore`, y solo se sube `data/.gitkeep` para que exista la carpeta. En una sesión nueva (por ejemplo, Claude Code en la nube):
+El repositorio es privado y no incluye tus datos de práctica: `data/intentos.json`, `data/sesiones/` y `data/informes/` están en `.gitignore`, y solo se sube `data/.gitkeep` para que exista la carpeta. En una sesión nueva (por ejemplo, Claude Code en la nube):
 
 ```bash
 npm install     # dependencias
@@ -123,9 +123,18 @@ Al terminar ves, en este orden:
 
 **Evolución** ("Ver evolución") muestra la nota por parte de la rúbrica con su tendencia, el tiempo por parte y la frecuencia de cada tipo de error (últimos 5 intentos frente a los 5 anteriores).
 
+**Informe de un intento anterior:** en «Ver evolución» → «Todos los intentos», el botón «Ver informe» abre la evaluación completa de ese intento, igual que al terminarlo:
+- nota, rúbrica, puntos perdidos y consejos;
+- tiempos y patrones;
+- mapa de calor y repetición;
+- revisión paso a paso y corrección decisión a decisión del SFL.
+
+El informe se recalcula con los escenarios y las respuestas guardados al terminar, no a partir de la semilla, así que no cambia aunque cambie el generador. La tendencia se compara con los intentos anteriores a ese. Los intentos guardados antes de esta función no tienen informe y muestran «—».
+
 ## Dónde se guarda todo
 
 - `data/intentos.json`: un resumen por intento (modo, semilla, nota, partes, tiempos y errores). Sin el servidor de Vite, los intentos se guardan en el navegador y se pueden exportar a JSON.
+- `data/informes/<id>.json`: lo necesario para reabrir el informe desde el historial: configuración, escenarios jugados, respuestas, tiempos y el nombre de su registro en `data/sesiones/`. Sin el servidor de Vite se guarda en el navegador, que tiene poco espacio: si no cabe, ese intento no tendrá «Ver informe». Al borrar el historial también se borran los informes.
 - `data/sesiones/<fecha>-<semilla>.json`: el registro completo de cada partida. Incluye:
   - ratón (muestreado cada 100 ms como mucho), clics, scroll y hovers de más de 300 ms sobre datos, microbios, tablas y preguntas;
   - aperturas y cierres;

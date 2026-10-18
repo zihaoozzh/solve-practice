@@ -76,6 +76,16 @@ function sessionsFile(): Plugin {
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify(body));
     };
+    if (req.method === 'GET') {
+      // Lectura de un registro para reabrir su informe desde el historial
+      const id = new URL(req.url ?? '/', 'http://local').searchParams.get('id')?.replace(/[^A-Za-z0-9_-]/g, '') ?? '';
+      if (!id) return send(400, { error: 'Falta el id' });
+      try {
+        return send(200, JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, `${id}.json`), 'utf-8')));
+      } catch {
+        return send(404, { error: 'No existe ese registro' });
+      }
+    }
     if (req.method !== 'POST') return send(405, { error: 'Método no permitido' });
     let body = '';
     req.on('data', (c: Buffer) => (body += c.toString('utf-8')));
@@ -112,8 +122,59 @@ function sessionsFile(): Plugin {
   };
 }
 
+const REPORTS_DIR = path.join(ROOT, 'data', 'informes');
+
+/** Informe completo de cada intento (escenarios, respuestas y tiempos) en data/informes/<id>.json (solo servidor local). */
+function reportsFile(): Plugin {
+  const handler = (req: any, res: any) => {
+    const send = (status: number, body: unknown) => {
+      res.statusCode = status;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify(body));
+    };
+    if (req.method === 'GET') {
+      const id = new URL(req.url ?? '/', 'http://local').searchParams.get('id')?.replace(/[^A-Za-z0-9_-]/g, '') ?? '';
+      if (!id) return send(400, { error: 'Falta el id' });
+      try {
+        return send(200, JSON.parse(fs.readFileSync(path.join(REPORTS_DIR, `${id}.json`), 'utf-8')));
+      } catch {
+        return send(404, { error: 'No existe ese informe' });
+      }
+    }
+    if (req.method === 'DELETE') {
+      fs.rmSync(REPORTS_DIR, { recursive: true, force: true });
+      return send(200, { ok: true });
+    }
+    if (req.method !== 'POST') return send(405, { error: 'Método no permitido' });
+    let body = '';
+    req.on('data', (c: Buffer) => (body += c.toString('utf-8')));
+    req.on('end', () => {
+      try {
+        const rec = JSON.parse(body || '{}');
+        const id = String(rec?.id ?? '').replace(/[^A-Za-z0-9_-]/g, '');
+        if (!id || rec?.version !== 1) return send(400, { error: 'Informe no válido' });
+        fs.mkdirSync(REPORTS_DIR, { recursive: true });
+        const file = path.join(REPORTS_DIR, `${id}.json`);
+        fs.writeFileSync(file, JSON.stringify(rec), 'utf-8');
+        send(200, { ok: true, file: path.relative(ROOT, file) });
+      } catch {
+        send(400, { error: 'JSON no válido' });
+      }
+    });
+  };
+  return {
+    name: 'reports-file',
+    configureServer(server) {
+      server.middlewares.use('/api/informes', handler);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use('/api/informes', handler);
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), attemptsFile(), sessionsFile()],
+  plugins: [react(), attemptsFile(), sessionsFile(), reportsFile()],
   base: './',
   test: {
     environment: 'node',
