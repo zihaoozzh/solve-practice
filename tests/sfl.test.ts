@@ -12,6 +12,8 @@ import {
   ONBOARDING_BEST,
   reflectTruth,
   validateIsland,
+  reflectStart,
+  stateRequest,
 } from '../src/sfl/island';
 import { gradeIsland, islandPatterns } from '../src/sfl/islandGrade';
 import { overall, T } from '../src/analysis/rubric';
@@ -490,5 +492,41 @@ describe('Nota global con varias pruebas', () => {
     };
     expect(perPoint('sfl-classic')).toBeGreaterThan(perPoint('sfl-island'));
     expect(Math.round(o2.pointsOff.reduce((s, p) => s + p.pct, 0) * 10)).toBe(1000 - Math.round(o2.scorePct * 10));
+  });
+});
+
+describe('SFL Island: notas de la mañana y explicación de Reflexionar', () => {
+  it('las notas señalan a cada persona o estación clave sin revelar la respuesta, y hay una que no importa', () => {
+    for (let i = 0; i < 30; i++) {
+      const sc = generateIsland(`notes${i}`, i % 2 ? 'hard' : 'normal');
+      expect(validateIsland(sc)).toEqual([]);
+      sc.days.forEach((day) => {
+        const keyNames = dayKeyQuestions(day).map((q) => {
+          const id = q.split(':')[0];
+          return (sc.researchers.find((r) => r.id === id)?.name ?? sc.stations.find((s) => s.id === id)!.name).toLowerCase();
+        });
+        expect(day.morningNotes.length).toBe(keyNames.length + 1);
+        for (const n of keyNames) expect(day.morningNotes.some((x) => x.toLowerCase().includes(n))).toBe(true);
+        // Ninguna nota dice a qué estación quiere ir alguien ni qué necesita una estación
+        for (const note of day.morningNotes) for (const st of sc.stations) if (!note.toLowerCase().startsWith(`la ${st.name.toLowerCase()}`)) expect(note.toLowerCase()).not.toContain(st.name.toLowerCase());
+      });
+    }
+  });
+
+  it('explica cuando tu respuesta a una petición cambia cómo acaba el día alguien', () => {
+    for (let i = 0; i < 40; i++) {
+      const sc = generateIsland(`arc${i}`, 'normal');
+      const ans = perfectPlay(sc);
+      const g = gradeIsland(sc, ans);
+      for (const d of sc.days.keys())
+        for (const r of sc.researchers) {
+          const req = stateRequest(sc, d, r.id);
+          if (!req || reflectStart(sc, ans, d, r.id) === reflectTruth(sc, ans, d, r.id)) continue;
+          const dec = g.decisions.find((x) => x.id === `isl${d}-reflect-${r.id}`)!;
+          expect(dec.why).toMatch(/le alivió/);
+          return;
+        }
+    }
+    throw new Error('ningún escenario con cambio de nivel por una petición');
   });
 });

@@ -81,6 +81,8 @@ export interface DayPlan {
   goal: string;
   goalKind: 'people' | 'stations' | 'balance';
   briefing: string;
+  /** Notas de la mañana: señalan a quién conviene preguntar (sin dar la respuesta) y alguna que no importa. */
+  morningNotes: string[];
   budget: number;
   need: Record<string, Skill>;
   heavy: string | null;
@@ -515,11 +517,39 @@ function tryGenerate(rng: Rng, seed: string, difficulty: Difficulty, lang: Lang)
             `Coordinator note: one of the stations will have a particularly heavy day today.`,
           )
         : t('Aviso del coordinador: jornada normal; revisad las notas de la mañana.', 'Coordinator note: a normal day; check the morning notes.');
+      // Notas de la mañana: una pista por cada dato clave (quién o qué estación) y una que no importa
+      const morningNotes: string[] = [];
+      for (const f of keyFacts) {
+        const [kind, id] = f.fact.split(':');
+        const who = kind === 'need' ? sName(id) : rName(id);
+        if (kind === 'pref') morningNotes.push(t(`${who} comentó ayer que le apetecería probar algo distinto.`, `${who} mentioned yesterday they would like to try something different.`));
+        else if (kind === 'blocked') morningNotes.push(t(`${who} pasó ayer por la enfermería.`, `${who} went to the first-aid room yesterday.`));
+        else if (kind === 'overload') morningNotes.push(t(`${who} se quedó trabajando hasta muy tarde.`, `${who} stayed working until very late.`));
+        else morningNotes.push(t(`${la(who)[0].toUpperCase()}${la(who).slice(1)} ha recibido un encargo fuera de lo habitual.`, `The ${who} has received an unusual request.`));
+      }
+      morningNotes.push(t(`${low.name} entregó ayer su informe antes de tiempo.`, `${low.name} handed in their report early yesterday.`));
+      const noteTargets = new Set([...keyTargets, low.id]);
+      const idle = researchers.filter((r) => !noteTargets.has(r.id));
+      if (idle.length) {
+        const herring = rng.pick(idle).name;
+        morningNotes.push(
+          rng.pick([
+            t(`${herring} ha preguntado a qué hora es la cena.`, `${herring} asked what time dinner is.`),
+            t(`${herring} ha traído pasteles para todo el equipo.`, `${herring} brought cakes for the whole team.`),
+            t(`${herring} quiere organizar una excursión el fin de semana.`, `${herring} wants to organise a weekend trip.`),
+          ]),
+        );
+      } else {
+        const st = rng.pick(stations).name;
+        morningNotes.push(t(`${la(st)[0].toUpperCase()}${la(st).slice(1)} ha cambiado la cafetera.`, `The ${st} has a new coffee machine.`));
+      }
+      const shuffledNotes = rng.shuffle(morningNotes);
       days.push({
         day: d + 1,
         goal,
         goalKind,
         briefing,
+        morningNotes: shuffledNotes,
         budget: ISLAND_CONFIG.questionsPerDay[d],
         need,
         heavy,
@@ -542,7 +572,6 @@ function tryGenerate(rng: Rng, seed: string, difficulty: Difficulty, lang: Lang)
       break;
     }
   }
-  void rName;
   return {
     seed,
     lang,
@@ -915,6 +944,13 @@ export function validateIsland(sc: IslandScenario): IslandIssue[] {
     if (sc.researchers.every((r) => d.optimum[r.id] === d.baseline[r.id]))
       add('BASELINE', `Día ${d.day}: la asignación óptima es la que sugieren los cargos visibles (no hace falta explorar).`);
     if (!d.keyFacts.length) add('KEYS', `Día ${d.day}: ningún dato oculto cambia la asignación.`);
+    // Las notas de la mañana deben señalar a cada persona o estación a la que hay que preguntar
+    for (const q of dayKeyQuestions(d)) {
+      const target = q.split(':')[0];
+      const name = sc.researchers.find((r) => r.id === target)?.name ?? sc.stations.find((st) => st.id === target)?.name ?? target;
+      const lower = (x: string) => x.toLowerCase();
+      if (!(d.morningNotes ?? []).some((n) => lower(n).includes(lower(name)))) add('NOTES', `Día ${d.day}: ninguna nota de la mañana señala a ${name}.`);
+    }
     // Los datos clave (asignación y petición enlazada) deben caber en el presupuesto, una pregunta por objetivo y día,
     // y dejar como mucho `slack` preguntas libres: malgastar preguntas tiene que costar información.
     const keyQuestions = new Set(d.keyFacts.map((f) => f.question));
@@ -1034,6 +1070,11 @@ export function reflectTruth(sc: IslandScenario, answers: IslandDayAnswer[], d: 
   if (day.overloaded[rid]) return 'low';
   if (req) return helped ? 'mid' : 'low';
   return effectiveMood(sc, answers, d, rid);
+}
+
+/** Nivel de la dimensión de Reflexión al EMPEZAR el día (lo que contaría si le preguntas por la mañana). */
+export function reflectStart(sc: IslandScenario, answers: IslandDayAnswer[], d: number, rid: string): Level {
+  return sc.days[d].reflectDimension === 'workload' ? effectiveWorkload(sc, d, rid) : effectiveMood(sc, answers, d, rid);
 }
 
 /** ¿Tenía el jugador pruebas sobre esta persona ese día? (preguntó por su estado o atendió su petición). */

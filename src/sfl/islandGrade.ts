@@ -15,7 +15,9 @@ import {
   IslandScenario,
   LEVEL_LABEL,
   REASON_LABEL,
+  reflectStart,
   reflectTruth,
+  stateRequest,
   skillLabel,
 } from './island';
 
@@ -289,6 +291,13 @@ export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[], onbo
       const ok = yours === truth;
       const earnedT = ok ? rfT[i] : yours === 'unknown' && !evidence ? 15 : 0;
       const src = `«${qLabel(`${r.id}:state`)}»`;
+      // Si tu respuesta a su petición le cambió el día, se explica (empezó en un nivel y acabó en otro)
+      const start = reflectStart(sc, answers, d, r.id);
+      const req = stateRequest(sc, d, r.id);
+      const arc =
+        start !== truth && req
+          ? ` Empezó el día ${LEVEL_LABEL.es[start].toLowerCase()} (eso es lo que te contó), pero tu respuesta a su petición «${req.title}» le alivió: al cerrar el día está ${LEVEL_LABEL.es[truth].toLowerCase()}. Reflexionar valora cómo acaba el día.`
+          : '';
       decisions.push({
         id: `isl${d}-reflect-${r.id}`,
         day: d + 1,
@@ -298,12 +307,12 @@ export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[], onbo
         best: LEVEL_LABEL.es[truth],
         ok: ok ? true : earnedT > 0 ? 'partial' : false,
         why: ok
-          ? 'Correcto.'
+          ? `Correcto.${arc}`
           : yours === 'unknown'
             ? evidence
               ? 'Tenías pruebas para responder: preguntaste por su estado o atendiste su petición.'
               : '«No lo sé» es honesto sin pruebas, pero vale menos que saberlo.'
-            : `Era ${LEVEL_LABEL.es[truth].toLowerCase()}. ${evidence ? 'Tenías la información.' : 'No tenías pruebas: respondiste por intuición.'}`,
+            : `Era ${LEVEL_LABEL.es[truth].toLowerCase()}. ${evidence ? 'Tenías la información.' : 'No tenías pruebas: respondiste por intuición.'}${arc}`,
         info: answerText(sc, answers, d, `${r.id}:state`),
         when: `${tag}, Explorar (${src}) o en su petición de apoyo.`,
       });
@@ -312,7 +321,7 @@ export function gradeIsland(sc: IslandScenario, answers: IslandDayAnswer[], onbo
         label: `${tag} · Reflexionar: ${r.name}`,
         max: P(rfT[i]),
         earned: P(earnedT),
-        why: ok ? 'Correcto.' : `Era ${LEVEL_LABEL.es[truth].toLowerCase()}.`,
+        why: ok ? 'Correcto.' : `Era ${LEVEL_LABEL.es[truth].toLowerCase()}.${arc}`,
         errorType: ok || (yours === 'unknown' && !evidence) ? undefined : yours ? (evidence ? 'sfl-reflect' : 'sfl-reflect-guess') : 'sfl-blank',
       };
     });

@@ -386,3 +386,6 @@ code { background: var(--line-soft); padding: 1px 6px; border-radius: 4px; font-
 .rank-pos { font-weight: 700; color: var(--accent); width: 18px; }
 .rank-name { flex: 1; }
 .history-table .btn { white-space: nowrap; }
+
+.morning-notes { background: var(--amber-soft); border-radius: 8px; padding: 8px 12px; margin-top: 8px; font-size: 14px; }
+.morning-notes ul { margin: 4px 0 0; padding-left: 18px; }

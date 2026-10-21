@@ -314,6 +314,16 @@ export function IslandRun({ scenario, durationSec, label, exam = false, onFinish
             </div>
             <h2>{day.goal}</h2>
             <p className="muted">{day.briefing}</p>
+            {day.morningNotes?.length > 0 && (
+              <div className="morning-notes" data-track="morning-notes">
+                <strong>{t('Notas de la mañana', 'Morning notes')}</strong>
+                <ul>
+                  {day.morningNotes.map((n, i) => (
+                    <li key={i}>{n}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
           )}
 
